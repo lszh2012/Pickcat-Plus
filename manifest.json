@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "PICKCAT Plus",
+  "version": "1.0",
+  "description": "更好的 PICKCAT！",
+  "permissions": ["storage"],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://pickcat.dao3.fun/*"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["cursors/*"],
+      "matches": ["https://pickcat.dao3.fun/*"]
+    }
+  ]
+}
