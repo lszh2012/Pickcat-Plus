@@ -64,7 +64,4 @@ PICKCAT-Plus/
     ├── style1.png
     ├── style2.png
     ├── style3.png
-    ├── style4_normal.png
-    ├── style4_link.png
-    ├── ...
     └── style6.png
