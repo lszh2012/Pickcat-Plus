@@ -1,7 +1,7 @@
-console.log('🚀 PICKCAT 助手 (指针暴力版) 已启动');
+console.log('🚀 PICKCAT Plus 已启动');
 
 // ==========================================
-// 1. 鼠标指针注入（暴力覆盖）
+// 1. 鼠标指针注入（单箭头与自定义）
 // ==========================================
 function injectCursorStyle(cursorStyle, customBase64) {
     let cursorStyleTag = document.getElementById('pickcat-cursor-style');
@@ -17,25 +17,16 @@ function injectCursorStyle(cursorStyle, customBase64) {
         document.head.appendChild(cursorStyleTag);
     }
 
-    const ext = '.png'; 
-    const getPath = (state) => {
-        if (['style1', 'style2', 'style3', 'style6'].includes(cursorStyle)) {
-            return chrome.runtime.getURL(`cursors/${cursorStyle}${ext}`);
-        }
-        if (state === 'normal') {
-            return chrome.runtime.getURL(`cursors/${cursorStyle}_normal${ext}`); 
-        }
-        return chrome.runtime.getURL(`cursors/${cursorStyle}_${state}${ext}`);
-    };
-
+    // 获取指针路径
     let normal = '';
     if (cursorStyle === 'custom' && customBase64 && customBase64.startsWith('data:image')) {
         normal = customBase64;
     } else {
-        normal = getPath('normal');
+        // style1, style2, style3, style6 默认读取 styleX.png
+        normal = chrome.runtime.getURL(`cursors/${cursorStyle}.png`);
     }
 
-    // 使用最高优先级覆盖，确保不遗漏
+    // 统一映射：因为没有全套，所有交互点都使用同一个指针，但保留 pointer/text 的语义
     let cssText = `
         html, body, div, span, p, h1, h2, h3, h4, h5, h6, li, ul, ol, table, tr, td, th, main, header, footer, section, article, textarea, input, a, button, [role="button"], select, option, summary, img, canvas, svg, video {
             cursor: url('${normal}'), auto !important;
@@ -47,35 +38,6 @@ function injectCursorStyle(cursorStyle, customBase64) {
             cursor: url('${normal}'), text !important;
         }
     `;
-
-    if (cursorStyle === 'style4' || cursorStyle === 'style5') {
-        const link = getPath('link');
-        const text = getPath('text');
-        const busy = getPath('busy');
-        const cross = getPath('cross') || normal; 
-        const disable = getPath('disable') || normal;
-
-        cssText = `
-            html, body, div, span, p, h1, h2, h3, h4, h5, h6, li, ul, ol, table, tr, td, th, main, header, footer, section, article, textarea {
-                cursor: url('${normal}'), auto !important;
-            }
-            a, a *, button, button *, [role="button"], .cursor-pointer, select, option, summary, [onclick], .btn {
-                cursor: url('${link}'), pointer !important;
-            }
-            input, textarea, [contenteditable="true"], p, span, .prose, .markdown-body {
-                cursor: url('${text}'), text !important;
-            }
-            .loading, .spinner, [class*="loading"], [class*="spin"] {
-                cursor: url('${busy}'), wait !important;
-            }
-            img, canvas, svg, video {
-                cursor: url('${cross}'), crosshair !important;
-            }
-            button:disabled, input:disabled, .disabled, [aria-disabled="true"], .cursor-not-allowed {
-                cursor: url('${disable}'), not-allowed !important;
-            }
-        `;
-    }
 
     cursorStyleTag.textContent = cssText;
     console.log(`✅ 鼠标指针注入成功:`, cursorStyle);
@@ -100,17 +62,26 @@ function applyBackground(bgUrl, maskEnabled) {
         document.documentElement.style.setProperty('background-attachment', 'fixed', 'important');
         document.documentElement.style.setProperty('background-repeat', 'no-repeat', 'important');
     }
+    
     let style = document.getElementById('pickcat-custom-theme-style');
     if (!style) {
         style = document.createElement('style');
         style.id = 'pickcat-custom-theme-style';
         document.head.appendChild(style);
     }
-    style.textContent = `body, #__next, #root, .bg-canvas, .min-h-dvh { background-color: transparent !important; background-image: none !important; } img[src*="home-decoration"], img[src*="search-decoration"] { display: none !important; }`;
+    style.textContent = `
+        body, #__next, #root, .bg-canvas, .min-h-dvh { 
+            background-color: transparent !important; 
+            background-image: none !important; 
+        } 
+        img[src*="home-decoration"], img[src*="search-decoration"] { 
+            display: none !important; 
+        }
+    `;
 }
 
 // ==========================================
-// 3. 注入 Kitten4
+// 3. 注入 Kitten4 (不覆盖KN)
 // ==========================================
 function injectKitten4() {
     if (document.getElementById('pickcat-custom-kitten4')) return;
@@ -121,8 +92,13 @@ function injectKitten4() {
             clone.id = 'pickcat-custom-kitten4';
             clone.href = 'https://kitten4.codemao.cn/';
             clone.target = '_blank';
+            
             const img = clone.querySelector('img');
-            if (img) img.src = 'https://pic1.imgdb.cn/i/034hpkyOpuw8Chd1mYXPav.png';
+            if (img) {
+                img.src = 'https://pic1.imgdb.cn/i/034hpkyOpuw8Chd1mYXPav.png';
+                img.style.objectFit = 'contain';
+            }
+            
             const walker = document.createTreeWalker(clone, NodeFilter.SHOW_TEXT);
             let textNode;
             while ((textNode = walker.nextNode())) {
@@ -131,6 +107,7 @@ function injectKitten4() {
                     break;
                 }
             }
+            
             link.parentNode.insertBefore(clone, link.nextSibling);
             break; 
         }
@@ -151,7 +128,11 @@ function processLinks() {
             if (!link.dataset.externalHooked) {
                 link.dataset.externalHooked = 'true';
                 link.addEventListener('click', function(e) {
-                    if (e.button === 0) { e.preventDefault(); e.stopPropagation(); window.open(href, '_blank'); }
+                    if (e.button === 0) { 
+                        e.preventDefault(); 
+                        e.stopPropagation(); 
+                        window.open(href, '_blank'); 
+                    }
                 });
             }
         }
@@ -159,13 +140,19 @@ function processLinks() {
 }
 
 // ==========================================
-// 5. 初始化
+// 5. 初始化与监听
 // ==========================================
 function init() {
     chrome.storage.local.get(['pickcatBgUrl', 'pickcatMaskEnabled', 'pickcatCursor', 'pickcatCustomCursor'], (res) => {
         const bgUrl = res.pickcatBgUrl || '';
         const maskEnabled = res.pickcatMaskEnabled !== undefined ? res.pickcatMaskEnabled : true;
-        const cursorStyle = res.pickcatCursor || 'default'; 
+        
+        // 容错：如果用户之前存过 style4/style5，强制回退到 default
+        let cursorStyle = res.pickcatCursor || 'default'; 
+        if (['style4', 'style5'].includes(cursorStyle)) {
+            cursorStyle = 'default';
+        }
+        
         const customCursor = res.pickcatCustomCursor || '';
         
         applyBackground(bgUrl, maskEnabled);
@@ -176,13 +163,22 @@ function init() {
 }
 
 function startApp() {
-    if (!document.body) { setTimeout(startApp, 50); return; }
-    const observer = new MutationObserver(() => { processLinks(); injectKitten4(); });
+    if (!document.body) { 
+        setTimeout(startApp, 50); 
+        return; 
+    }
+    
+    const observer = new MutationObserver(() => { 
+        processLinks(); 
+        injectKitten4(); 
+    });
     observer.observe(document.body, { childList: true, subtree: true });
+    
     init();
 }
 
 startApp();
+
 chrome.storage.onChanged.addListener((changes) => {
     if (changes.pickcatBgUrl || changes.pickcatMaskEnabled || changes.pickcatCursor || changes.pickcatCustomCursor) { 
         init(); 
