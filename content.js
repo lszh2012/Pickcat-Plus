@@ -96,9 +96,17 @@ function injectCursorStyle(cursorStyle, customBase64) {
 
 function applyBackground(bgUrl, bgBase64, maskEnabled) {
     let finalUrl = bgBase64 ? bgBase64 : bgUrl;
+    // 关键：只有真的设了自定义背景，才允许把站点的背景层扒掉。
+    // 否则（没设背景时）连 .bg-canvas 这种装饰层一起被 background-image:none 干掉，
+    // 会导致「隐藏大猫」开关怎么切都看不到猫。
+    const hasBg = !!(finalUrl && String(finalUrl).trim().length >= 5);
 
-    if (!finalUrl || finalUrl.length < 5) {
+    if (!hasBg) {
         document.documentElement.style.removeProperty('background-image');
+        document.documentElement.style.removeProperty('background-size');
+        document.documentElement.style.removeProperty('background-position');
+        document.documentElement.style.removeProperty('background-attachment');
+        document.documentElement.style.removeProperty('background-repeat');
     } else {
         // 主题包支持纯 CSS 渐变（不走图床，零请求、零字节）
         const isGradient = /^(repeating-)?(linear|radial|conic)-gradient\(/i.test(String(finalUrl).trim());
@@ -121,8 +129,10 @@ function applyBackground(bgUrl, bgBase64, maskEnabled) {
         document.head.appendChild(style);
     }
     style.textContent = `
-        body, #__next, #root, .bg-canvas, .min-h-dvh { background-color: transparent !important; background-image: none !important; } 
+        ${hasBg ? `body, #__next, #root, .min-h-dvh { background-color: transparent !important; background-image: none !important; }` : ''}
         .pickcat-grid-layout { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 12px !important; width: 100% !important; }
+        .pickcat-category-listified { display: flex !important; flex-direction: column !important; gap: 12px !important; width: 100% !important; }
+        [data-pickcat-hidden] { display: none !important; }
     `;
 }
 
@@ -132,9 +142,12 @@ function applyHideCat(hide) {
         if (!style) {
             style = document.createElement('style');
             style.id = 'pickcat-hide-cat-style';
-            style.textContent = `img[src*="home-decoration"], img[src*="search-decoration"] { display: none !important; }`;
             document.head.appendChild(style);
         }
+        style.textContent = `
+            img[src*="home-decoration"], img[src*="search-decoration"], img[src*="post-composer-decoration"] { display: none !important; }
+            [style*="home-decoration"], [style*="search-decoration"] { background-image: none !important; }
+        `;
     } else {
         if (style) style.remove();
     }
@@ -144,10 +157,17 @@ function applyHideCat(hide) {
 // 模块 2：社区优化
 // ==========================================
 function injectKitten4() {
-    if (!config.kitten4) return;
-    if (document.getElementById('pickcat-custom-kitten4')) return;
+    const existing = document.getElementById('pickcat-custom-kitten4');
+    if (!config.kitten4) {
+        // 关掉时要立刻消失，别等刷新
+        if (existing) existing.remove();
+        return;
+    }
+    if (existing) return;
     document.querySelectorAll('a').forEach(link => {
         if (link.id !== 'pickcat-custom-kitten4' && link.textContent.includes('KittenN')) {
+            const p = link.parentNode;
+            if (!p || !p.isConnected) return;
             const clone = link.cloneNode(true);
             clone.id = 'pickcat-custom-kitten4';
             clone.href = 'https://kitten4.codemao.cn/';
@@ -159,9 +179,15 @@ function injectKitten4() {
             while ((textNode = walker.nextNode())) {
                 if (textNode.nodeValue.includes('KittenN')) { textNode.nodeValue = textNode.nodeValue.replace('KittenN', 'Kitten4'); break; }
             }
-            link.parentNode.insertBefore(clone, link.nextSibling);
+            p.insertBefore(clone, link.nextSibling);
         }
     });
+}
+
+// 移除 Kitten4 克隆节点（开关从开到关时用）
+function removeKitten4() {
+    const node = document.getElementById('pickcat-custom-kitten4');
+    if (node) node.remove();
 }
 
 function processLinks() {
@@ -184,9 +210,31 @@ function processLinks() {
 // ==========================================
 // 模块 3：首页倒反天罡
 // ==========================================
+// ---- 倒反天罡：原节点保留在 DOM 里只是隐藏，另插一个克隆节点做新布局 ----
+// 这样做的好处：开关从「开」拨回「关」时，删掉克隆节点 + 去掉隐藏标记就完事，
+// 不用刷新页面，也不会破坏 React 管理的原节点。
+
+const CLONE_FLAG = 'data-pickcat-clone';
+const HIDDEN_FLAG = 'data-pickcat-hidden';
+
+function revertByKind(kind, containerClass) {
+    document.querySelectorAll(`[${CLONE_FLAG}="${kind}"]`).forEach(node => node.remove());
+    document.querySelectorAll(`[${HIDDEN_FLAG}="${kind}"]`).forEach(node => node.removeAttribute(HIDDEN_FLAG));
+    if (containerClass) {
+        document.querySelectorAll('.' + containerClass).forEach(box => box.classList.remove(containerClass));
+    }
+}
+
+function revertCreationCards() {
+    revertByKind('creation', 'pickcat-grid-layout');
+}
+
+function revertCategoryList() {
+    revertByKind('category', 'pickcat-category-listified');
+}
+
 function transformCreationCards() {
-    if (!config.creationGrid) return;
-    if (document.querySelector('.pickcat-grid-layout')) return;
+    if (!config.creationGrid) { revertCreationCards(); return; }
 
     const headings = Array.from(document.querySelectorAll('h2, h3, div')).filter(el => el.textContent.trim() === '创作');
     if (headings.length === 0) return;
@@ -194,12 +242,12 @@ function transformCreationCards() {
 
     const listContainer = heading.nextElementSibling;
     if (!listContainer || listContainer.tagName !== 'DIV') return;
+    if (listContainer.classList.contains('pickcat-grid-layout')) return;
 
-    const items = Array.from(listContainer.querySelectorAll('a'));
+    const items = Array.from(listContainer.querySelectorAll('a')).filter(a => !a.hasAttribute(CLONE_FLAG));
     if (items.length === 0) return;
 
     listContainer.classList.add('pickcat-grid-layout');
-    listContainer.style.setProperty('display', 'grid', 'important');
 
     items.forEach(item => {
         const href = item.getAttribute('href');
@@ -217,13 +265,14 @@ function transformCreationCards() {
             descText = '让世界没有难做的App';
         }
 
-        item.innerHTML = '';
-        
-        item.className = "overflow-visible flex aspect-square w-full min-w-0 flex-col rounded-lg p-3.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50 bg-(--ui-card-translucent) text-default hover:bg-(--ui-card-interactive)";
-        
+        const clone = document.createElement('a');
+        clone.setAttribute(CLONE_FLAG, 'creation');
+        clone.className = "overflow-visible flex aspect-square w-full min-w-0 flex-col rounded-lg p-3.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50 bg-(--ui-card-translucent) text-default hover:bg-(--ui-card-interactive)";
+        if (href) clone.setAttribute('href', href);
         if (href && href.startsWith('http') && !href.includes(location.hostname)) {
-            item.setAttribute('target', '_blank');
+            clone.setAttribute('target', '_blank');
         }
+        if (titleText) clone.setAttribute('aria-label', titleText);
 
         let innerHtml = `
             <div data-slot="body" class="p-4 sm:p-6 min-w-0 contents">
@@ -234,7 +283,7 @@ function transformCreationCards() {
         if (imgSrc) {
             let finalImgSrc = imgSrc;
             if (titleText === 'Kitten4') finalImgSrc = safeGetURL('icons/kitten4.png');
-            
+
             innerHtml += `
                 <span class="inline-flex shrink-0 items-center justify-center rounded-md bg-info/10 text-info mt-auto size-9 self-end">
                     <img src="${finalImgSrc}" alt="" class="size-6 object-contain">
@@ -248,40 +297,56 @@ function transformCreationCards() {
             `;
         }
         innerHtml += `</div>`;
-        item.innerHTML = innerHtml;
+        clone.innerHTML = innerHtml;
+
+        const parent = item.parentNode;
+        if (!parent) return;
+        parent.insertBefore(clone, item.nextSibling);
+        item.setAttribute(HIDDEN_FLAG, 'creation');
     });
 }
 
 function transformCategoriesToList() {
-    if (!config.categoryList) return;
-    const firstCard = document.querySelector('a[aria-label="创作与作品"]');
-    if (!firstCard || firstCard.closest('.pickcat-category-listified')) return;
+    if (!config.categoryList) { revertCategoryList(); return; }
+
+    const firstCard = document.querySelector(`a[aria-label="创作与作品"]:not([${CLONE_FLAG}])`);
+    if (!firstCard) return;
 
     const listContainer = firstCard.parentElement;
     if (!listContainer) return;
+    if (listContainer.classList.contains('pickcat-category-listified')) return;
+
+    const items = Array.from(listContainer.querySelectorAll('a')).filter(a => !a.hasAttribute(CLONE_FLAG));
+    if (items.length === 0) return;
 
     listContainer.classList.add('pickcat-category-listified');
-    listContainer.style.setProperty('display', 'flex', 'important');
-    listContainer.style.setProperty('flex-direction', 'column', 'important');
-    listContainer.style.setProperty('gap', '12px', 'important');
 
-    const items = Array.from(listContainer.querySelectorAll('a'));
     items.forEach(item => {
         const titleText = item.querySelector('span.font-bold')?.textContent.trim() || item.getAttribute('aria-label') || '';
         const descText = item.querySelector('span.text-muted')?.textContent.trim() || '';
-        
+        const href = item.getAttribute('href');
+
         const iconSpan = item.querySelector('span.inline-flex');
         const iconSvg = iconSpan ? iconSpan.querySelector('svg') : null;
         const iconBgClass = iconSpan ? iconSpan.className : 'bg-info/10 text-info';
 
-        item.className = "flex items-center gap-4 w-full rounded-lg p-3 bg-(--ui-card-translucent) text-default hover:bg-(--ui-card-interactive) transition-colors";
-        
+        const clone = document.createElement('a');
+        clone.setAttribute(CLONE_FLAG, 'category');
+        clone.className = "flex items-center gap-4 w-full rounded-lg p-3 bg-(--ui-card-translucent) text-default hover:bg-(--ui-card-interactive) transition-colors";
+        if (href) clone.setAttribute('href', href);
+        if (href && href.startsWith('http') && !href.includes(location.hostname)) {
+            clone.setAttribute('target', '_blank');
+        }
+        if (titleText) clone.setAttribute('aria-label', titleText);
+
         let newHtml = '';
         if (iconSvg) {
-            iconSvg.setAttribute('style', 'font-size: 26px;'); 
-            newHtml += `<div class="flex items-center justify-center size-12 shrink-0 rounded-xl ${iconBgClass}">${iconSvg.outerHTML}</div>`;
+            // 克隆一份再改，别动原节点
+            const svgCopy = iconSvg.cloneNode(true);
+            svgCopy.setAttribute('style', 'font-size: 26px;');
+            newHtml += `<div class="flex items-center justify-center size-12 shrink-0 rounded-xl ${iconBgClass}">${svgCopy.outerHTML}</div>`;
         }
-        
+
         newHtml += `<div class="flex flex-col text-left">
             <span class="text-[15px] font-bold">${titleText}</span>
             <span class="text-[12px] text-muted mt-0.5">${descText}</span>
@@ -289,7 +354,12 @@ function transformCategoriesToList() {
 
         newHtml += `<div class="ml-auto text-muted"><svg xmlns="http://www.w3.org/2000/svg" class="iconify iconify--mingcute" width="1em" height="1em" viewBox="0 0 24 24" style="font-size: 20px;"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.343 6.343L15 12l-5.657 5.657"></path></svg></div>`;
 
-        item.innerHTML = newHtml;
+        clone.innerHTML = newHtml;
+
+        const parent = item.parentNode;
+        if (!parent) return;
+        parent.insertBefore(clone, item.nextSibling);
+        item.setAttribute(HIDDEN_FLAG, 'category');
     });
 }
 
@@ -907,13 +977,19 @@ function createSettingsPanel() {
 
                     <div class="tab-content" id="tab-about">
                         <div class="row-card" style="flex-direction: column; align-items: flex-start; gap: 12px;">
-                            <h3 style="margin:0; color:var(--text-main);">PICKCAT Plus v2.1.0</h3>
+                            <h3 style="margin:0; color:var(--text-main);">PICKCAT Plus v2.1.1</h3>
                             <p style="margin:0; font-size:13px; color:var(--text-muted); line-height:1.6;">
                                 一个由社区开发者手搓的非官方 PICKCAT 增强插件。<br>
                                 旨在提供更顺手、更沉浸的社区体验。
                             </p>
-                            <a href="https://github.com" target="_blank" style="color:var(--primary); font-size:13px; text-decoration:none;">👉 访问 GitHub 仓库</a>
-                            <button id="resetAllBtn" style="margin-top:16px; width:100%; padding:10px; background:#ef4444; color:white; border:none; border-radius:8px; cursor:pointer;">🔄 重置所有设置</button>
+                            <div style="display:flex; flex-direction:column; gap:6px;">
+                                <a href="https://github.com/lszh2012/Pickcat-Plus" target="_blank" rel="noopener" style="color:var(--primary); font-size:13px; text-decoration:none;">👉 访问 GitHub 仓库</a>
+                                <a href="https://pickcat.dao3.fun/profile/01a0d3af-d524-7801-a9df-dea9be93072a" target="_blank" rel="noopener" style="color:var(--primary); font-size:13px; text-decoration:none;">🐾 我的 PICKCAT 主页</a>
+                            </div>
+                            <div style="margin-top:16px; width:100%; display:flex; gap:8px;">
+                                <button id="resetAllBtn" style="flex:1; padding:10px; background:#ef4444; color:white; border:none; border-radius:8px; cursor:pointer; font:inherit;">🔄 重置所有设置</button>
+                                <button id="resetCancelBtn" style="display:none; padding:10px 14px; background:transparent; color:var(--text-muted); border:1px solid var(--border); border-radius:8px; cursor:pointer; font:inherit;">取消</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1262,8 +1338,29 @@ function createSettingsPanel() {
         });
     });
 
+    // 重置：用面板内二次确认代替原生 confirm（原生对话框被浏览器「阻止此页面创建更多对话框」拦掉后就点不动了）
+    let resetTimer = 0;
+    const resetCancelBtn = shadow.getElementById('resetCancelBtn');
+
+    function disarmReset() {
+        clearTimeout(resetTimer);
+        resetTimer = 0;
+        resetAllBtn.textContent = '🔄 重置所有设置';
+        resetAllBtn.style.background = '#ef4444';
+        if (resetCancelBtn) resetCancelBtn.style.display = 'none';
+    }
+
     resetAllBtn.addEventListener('click', () => {
-        if (!confirm('确定要关闭所有功能并恢复原站吗？')) return;
+        if (!resetTimer) {
+            // 第一次点：进入待确认状态，5 秒内没确认就自动撤回
+            resetAllBtn.textContent = '⚠️ 再点一次，确认清空所有设置';
+            resetAllBtn.style.background = '#b91c1c';
+            if (resetCancelBtn) resetCancelBtn.style.display = 'inline-block';
+            resetTimer = setTimeout(disarmReset, 5000);
+            return;
+        }
+
+        disarmReset();
         chrome.storage.local.get(null, (items) => {
             const keysToRemove = Object.keys(items).filter(k => k.startsWith('pickcat'));
             chrome.storage.local.remove(keysToRemove, () => {
@@ -1274,6 +1371,10 @@ function createSettingsPanel() {
             });
         });
     });
+
+    if (resetCancelBtn) {
+        resetCancelBtn.addEventListener('click', disarmReset);
+    }
 
     refreshPanelUI();
 
@@ -1311,6 +1412,7 @@ function loadAllConfigs(callback) {
         injectCursorStyle(cursorStyle, res.pickcatCustomCursor || ''); 
 
         applyHideCat(config.hideCat);
+        if (!config.kitten4) removeKitten4();
         injectKitten4();
         transformCreationCards();
         transformCategoriesToList();
@@ -1454,7 +1556,7 @@ const Workshop = (function () {
         return set({ [WS_DATA_PREFIX + id]: pluginData[id] || {} });
     }
 
-    function toast(text) {
+    function toast(text, ms) {
         let t = document.getElementById('pickcat-ws-toast');
         if (!t) {
             t = document.createElement('div');
@@ -1472,7 +1574,7 @@ const Workshop = (function () {
         t.__h = setTimeout(() => {
             t.style.opacity = '0';
             t.style.transform = 'translate(-50%, 14px)';
-        }, 2600);
+        }, ms || 2600);
     }
 
     /* ---------------- 清单 ---------------- */
@@ -2225,3 +2327,76 @@ const Workshop = (function () {
 
     return { mount: mount, onTabOpen: onTabOpen, run: runPlugins, toast: toast };
 })();
+
+/* ==========================================================================
+   模块 7：版本升级提示（只弹一次）
+   说明：content script 拿不到 chrome.runtime.onInstalled，
+        所以自己存一个「上次运行的版本号」来判断是升级还是首次安装。
+   ========================================================================== */
+(function initVersionNotice() {
+    const VER_KEY = 'pickcat_app_version';
+    // 旧版本（没有版本号标记）留下的痕迹，用来区分「升级」和「全新安装」
+    const LEGACY_KEYS = ['pickcatBgUrl', 'pickcatMaskEnabled', 'pickcatCursor', 'pickcatCustomCursor'];
+
+    function cmpVer(a, b) {
+        const pa = String(a || '0').split('.');
+        const pb = String(b || '0').split('.');
+        const len = Math.max(pa.length, pb.length);
+        for (let i = 0; i < len; i++) {
+            const x = parseInt(pa[i], 10) || 0;
+            const y = parseInt(pb[i], 10) || 0;
+            if (x !== y) return x > y ? 1 : -1;
+        }
+        return 0;
+    }
+
+    function currentVersion() {
+        try {
+            if (chrome.runtime && chrome.runtime.getManifest) {
+                return chrome.runtime.getManifest().version;
+            }
+        } catch (e) { /* 扩展被重载后旧上下文会抛错，忽略 */ }
+        return '';
+    }
+
+    function show(text) {
+        try {
+            if (typeof Workshop !== 'undefined' && Workshop && Workshop.toast) {
+                Workshop.toast(text, 9000);
+            }
+        } catch (e) { /* 面板还没建好就静默跳过 */ }
+    }
+
+    setTimeout(function () {
+        const ver = currentVersion();
+        if (!ver) return;
+        try {
+            chrome.storage.local.get([VER_KEY].concat(LEGACY_KEYS), function (res) {
+                if (chrome.runtime.lastError) return;
+                res = res || {};
+                const prev = res[VER_KEY];
+                const hasLegacy = LEGACY_KEYS.some(function (k) {
+                    return res[k] !== undefined && res[k] !== '' && res[k] !== null;
+                });
+
+                if (prev && cmpVer(prev, ver) >= 0) return;   // 同版本或更旧，不打扰
+
+                if (prev || hasLegacy) {
+                    // 老用户升级：只说版本变化和新增了什么，不要吓唬人
+                    // （以前这里写「加喵后缀需要重填」，但旧版 Pickcat-Plus 的键和新版同名同义，
+                    //   背景/遮罩/指针全部自动继承；真正要重填的只有「独立的加喵插件」用户，
+                    //   而那种用户是全新安装、storage 是空的，根本走不到这个分支，所以文案放在 README 里就好）
+                    show('⚡ PICKCAT Plus 已更新到 v' + ver + '：原来的设置都还在。新的「创意工坊」在侧栏第 4 个标签喵～');
+                } else {
+                    // 全新安装：欢迎一下
+                    show('🐾 欢迎使用 PICKCAT Plus v' + ver + '，点右边的小球开始折腾喵～');
+                }
+
+                try {
+                    chrome.storage.local.set({ [VER_KEY]: ver });
+                } catch (e) { /* 忽略 */ }
+            });
+        } catch (e) { /* 上下文失效，忽略 */ }
+    }, 3000);
+})();
+
