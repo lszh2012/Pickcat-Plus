@@ -1,0 +1,116 @@
+{
+  "schema": 1,
+  "updated": "2026-10-25",
+  "note": "PICKCAT Plus 创意工坊·内置清单（阶段 1）。主题是纯数据，插件是 JS，插件代码只在沙盒里跑。",
+  "items": [
+    {
+      "id": "theme-sakura",
+      "type": "theme",
+      "name": "樱花春日",
+      "emoji": "🌸",
+      "category": "theme",
+      "author": "PICKCAT Plus 官方",
+      "version": "1.0.0",
+      "verified": "official",
+      "desc": "粉樱渐变打底，配亮色柔纱与猫爪指针，春天就住在社区里。",
+      "preview": {
+        "bg": "linear-gradient(160deg,#ffe6f0,#ffd6e7 45%,#fff1f7)"
+      },
+      "apply": {
+        "pickcatBgUrl": "linear-gradient(160deg,#ffe6f0,#ffd6e7 45%,#fff1f7)",
+        "pickcatBgBase64": "",
+        "pickcatMaskEnabled": true,
+        "pickcatCursor": "style1"
+      }
+    },
+    {
+      "id": "theme-neon",
+      "type": "theme",
+      "name": "暗夜霓虹",
+      "emoji": "🌃",
+      "category": "theme",
+      "author": "PICKCAT Plus 官方",
+      "version": "1.0.0",
+      "verified": "official",
+      "desc": "深蓝夜到墨黑的径向渐变，不压一层灰纱，暗色里最通透的一款。",
+      "preview": {
+        "bg": "radial-gradient(120% 90% at 20% 0%, #1b2a4a 0%, #0b1020 55%, #05060d 100%)"
+      },
+      "apply": {
+        "pickcatBgUrl": "radial-gradient(120% 90% at 20% 0%, #1b2a4a 0%, #0b1020 55%, #05060d 100%)",
+        "pickcatBgBase64": "",
+        "pickcatMaskEnabled": false,
+        "pickcatCursor": "style2"
+      }
+    },
+    {
+      "id": "theme-halloween",
+      "type": "theme",
+      "name": "万圣夜惊魂",
+      "emoji": "🎃",
+      "category": "theme",
+      "author": "Helen.S",
+      "version": "1.0.0",
+      "verified": "reviewed",
+      "desc": "明月、蝙蝠与幽灵剪影铺满整个夜色，卡片换成南瓜橙描边，连滚动条和选中文字都跟着换色。社区成员 Helen.S 的作品。",
+      "preview": {
+        "bg": "radial-gradient(340px 240px at 84% 12%, #ffe9bd 0%, #ffd98f 30%, rgba(255,217,143,.18) 58%, transparent 70%), radial-gradient(700px 500px at 84% 10%, rgba(124,58,237,.55), transparent 62%), linear-gradient(180deg,#12071e 0%,#1a0b2e 60%,#0d0416 100%)"
+      },
+      "cssFile": "workshop/packs/theme-halloween.css",
+      "htmlClass": "pickcat-theme-halloween",
+      "apply": {
+        "pickcatBgUrl": "",
+        "pickcatBgBase64": "",
+        "pickcatMaskEnabled": false,
+        "pickcatCursor": "custom",
+        "pickcatCustomCursor": "data:image/png;base64,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"
+      }
+    },
+    {
+      "id": "ai-summary",
+      "type": "plugin",
+      "name": "AI 总结",
+      "emoji": "✨",
+      "category": "ai",
+      "author": "PICKCAT Plus 官方",
+      "version": "1.0.0",
+      "verified": "official",
+      "desc": "左下角点一下，把这篇帖子缩成 3-5 条要点。自带 Key，直连 DeepSeek，不经过任何中转。",
+      "entry": "workshop/packs/ai-summary.js",
+      "permissions": [
+        "dom-read",
+        "ui-interaction",
+        "notify",
+        "storage",
+        "network"
+      ],
+      "hosts": [
+        "api.deepseek.com",
+        "api.openai.com",
+        "api.moonshot.cn",
+        "dashscope.aliyuncs.com"
+      ],
+      "settings": [
+        {
+          "key": "apiKey",
+          "label": "API Key",
+          "type": "password",
+          "placeholder": "sk-...",
+          "hint": "只存在你本机的 chrome.storage 里，不会上传到任何服务器。"
+        },
+        {
+          "key": "model",
+          "label": "模型",
+          "type": "text",
+          "default": "deepseek-chat"
+        },
+        {
+          "key": "baseUrl",
+          "label": "接口地址",
+          "type": "text",
+          "default": "https://api.deepseek.com/chat/completions"
+        }
+      ]
+    }
+  ]
+}
