@@ -42,7 +42,21 @@
         "pickcatMaskEnabled": false,
         "pickcatCursor": "style2",
         "pickcatCustomCursor": ""
-      }
+      },
+      "claims": [
+        {
+          "key": "pickcatMaskEnabled",
+          "value": false,
+          "label": "背景遮罩",
+          "reason": "这套配色的通透感全靠不加灰纱，叠一层就发闷。"
+        },
+        {
+          "key": "pickcatCursor",
+          "value": "style2",
+          "label": "鼠标指针",
+          "reason": "配套的深色指针，换成别的会和夜色背景打架。"
+        }
+      ]
     }
   ]
 }
