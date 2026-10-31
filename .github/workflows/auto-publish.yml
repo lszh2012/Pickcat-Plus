@@ -1,7 +1,11 @@
 name: 创意工坊自动上架
 
+# 作者填完 Issue 表单 → 机器审计 → 通过就直接进 main，5 分钟后全网可见。
+# 维护者不需要在工作日参与；出问题靠 workshop/revoked.json 事后秒撤。
+
 on:
   issues:
+    # edited 是为了「改好了就地重跑」：作者编辑 Issue 内容后再试一次
     types: [opened, reopened, edited]
 
 permissions:
@@ -14,6 +18,7 @@ concurrency:
 
 jobs:
   publish:
+    # 只处理带 workshop 标签、或以「[投稿]」开头的 Issue
     if: >-
       contains(github.event.issue.labels.*.name, 'workshop') ||
       startsWith(github.event.issue.title, '[投稿]')
@@ -34,19 +39,27 @@ jobs:
       - name: 解析投稿表单
         id: parse
         continue-on-error: true
-        run: node tools/issue-to-submission.mjs --body-file /tmp/body.md --out /tmp/sub.json 2>&1 | tee /tmp/step.log
+        run: |
+          # 必须开 pipefail：否则 `node … | tee` 的退出码是 tee 的（永远是 0），
+          # 结果就是脚本明明失败了、整个 job 却报绿，还照样回一条「已上架」。
+          set -o pipefail
+          node tools/issue-to-submission.mjs --body-file /tmp/body.md --out /tmp/sub.json 2>&1 | tee /tmp/step.log
 
       - name: 机器审计 + 写文件
         id: publish
         if: steps.parse.outcome == 'success'
         continue-on-error: true
-        run: node tools/publish.mjs --input /tmp/sub.json 2>&1 | tee -a /tmp/step.log
+        run: |
+          set -o pipefail
+          node tools/publish.mjs --input /tmp/sub.json 2>&1 | tee -a /tmp/step.log
 
       - name: 全仓库自检
         id: check
         if: steps.parse.outcome == 'success' && steps.publish.outcome == 'success'
         continue-on-error: true
-        run: node tools/check.mjs 2>&1 | tee -a /tmp/step.log
+        run: |
+          set -o pipefail
+          node tools/check.mjs 2>&1 | tee -a /tmp/step.log
 
       - name: 提交并推送
         id: commit
