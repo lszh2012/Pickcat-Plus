@@ -1,0 +1,108 @@
+name: 创意工坊自动上架
+
+on:
+  issues:
+    types: [opened, reopened, edited]
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: workshop-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      contains(github.event.issue.labels.*.name, 'workshop') ||
+      startsWith(github.event.issue.title, '[投稿]')
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 把 Issue 正文落到临时文件
+        env:
+          BODY: ${{ github.event.issue.body }}
+        run: printf '%s' "$BODY" > /tmp/body.md
+
+      - name: 解析投稿表单
+        id: parse
+        continue-on-error: true
+        run: node tools/issue-to-submission.mjs --body-file /tmp/body.md --out /tmp/sub.json 2>&1 | tee /tmp/step.log
+
+      - name: 机器审计 + 写文件
+        id: publish
+        if: steps.parse.outcome == 'success'
+        continue-on-error: true
+        run: node tools/publish.mjs --input /tmp/sub.json 2>&1 | tee -a /tmp/step.log
+
+      - name: 全仓库自检
+        id: check
+        if: steps.parse.outcome == 'success' && steps.publish.outcome == 'success'
+        continue-on-error: true
+        run: node tools/check.mjs 2>&1 | tee -a /tmp/step.log
+
+      - name: 提交并推送
+        id: commit
+        if: steps.parse.outcome == 'success' && steps.publish.outcome == 'success' && steps.check.outcome == 'success'
+        run: |
+          set -e
+          git config user.name  "pickcat-bot"
+          git config user.email "pickcat-bot@users.noreply.github.com"
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "没有文件变化（可能是重复投稿同一内容）"
+            exit 0
+          fi
+          git add -A workshop
+          git commit -m "chore(workshop): 自动上架投稿 #${{ github.event.issue.number }}"
+          git push origin HEAD:main
+
+      - name: 回评并关闭 Issue（成功）
+        if: steps.commit.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NUM: ${{ github.event.issue.number }}
+        run: |
+          gh issue comment "$NUM" --body "✅ 自动审核通过，已经上架啦喵～
+
+          大约 **5 分钟后**客户端就能看到（设置面板 → 创意工坊 → 右上角「🌐 同步」可以立刻刷）。
+
+          - 条目会标成「🌐 社区 · 未经审核」，安装时用户会看到作者名和权限清单。
+          - 如果之后需要修改，直接在仓库改 \`workshop/packs/\` 里的文件并更新清单版本号即可。
+          - 如果内容有问题，维护者会用 \`workshop/revoked.json\` 在 10 分钟内下架。
+
+          谢谢投稿 🐾"
+          gh issue close "$NUM" --reason completed
+
+      - name: 回评（失败）
+        if: steps.parse.outcome == 'failure' || steps.publish.outcome == 'failure' || steps.check.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NUM: ${{ github.event.issue.number }}
+        run: |
+          {
+            echo "❌ 这次没通过自动审核，原因如下喵："
+            echo ""
+            echo '```'
+            tail -n 60 /tmp/step.log || echo '（没有日志）'
+            echo '```'
+            echo ""
+            echo "常见原因与改法："
+            echo ""
+            echo "| 报错 | 怎么改 |"
+            echo "|---|---|"
+            echo "| 选择器必须以 \`html.pickcat-theme-<id>\` 开头 | 每条规则前面都加上这个前缀 |"
+            echo "| 不允许的属性 / position / z-index | 主题不能改定位和层级，只做颜色、圆角、阴影、字体 |"
+            echo "| 只允许 data:image/* 的内联图片 | 不能写外链图片（会泄露访客 IP） |"
+            echo "| 禁止 eval / document / chrome. | 插件里改用 \`PickcatPlus.*\` 提供的接口 |"
+            echo "| 声明了 network 权限但没有 hosts 白名单 | 在「hosts 白名单」那一栏填一行一个域名 |"
+            echo ""
+            echo "改好后直接**编辑这条 Issue**（不用重开），我会自动再跑一次。"
+          } > /tmp/comment.md
+          gh issue comment "$NUM" --body-file /tmp/comment.md
