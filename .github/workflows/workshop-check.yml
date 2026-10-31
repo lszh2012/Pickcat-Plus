@@ -1,0 +1,50 @@
+name: 创意工坊检查
+
+# 什么时候跑：
+#   - 任何 PR（投稿基本都是 PR 过来）
+#   - 推送到 main 时也跑一遍，防止直接改文件漏检
+on:
+  pull_request:
+  push:
+    branches: [main]
+    paths:
+      - 'workshop/**'
+      - 'tools/**'
+      - 'content.js'
+      - 'sandbox.js'
+      - 'background.js'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: 清单与代码自检
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 校验社区清单
+        run: node tools/validate.mjs workshop/community.json
+
+      - name: 校验内置清单
+        run: node tools/validate.mjs workshop/builtin.json
+
+      - name: 语法检查（扩展本体）
+        run: |
+          for f in content.js sandbox.js background.js; do
+            if [ -f "$f" ]; then node --check "$f" && echo "✅ $f"; fi
+          done
+
+      - name: 检查扩展体积
+        run: |
+          size=$(du -sk --exclude='.git' --exclude='*.zip' . | cut -f1)
+          echo "扩展总大小：${size} KB"
+          if [ "$size" -gt 2048 ]; then
+            echo "::error::扩展体积超过 2MB（现在 ${size} KB），商店审核会慢，请瘦身"
+            exit 1
+          fi
