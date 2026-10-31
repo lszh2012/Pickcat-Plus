@@ -1,0 +1,122 @@
+name: 🎨 创意工坊投稿
+description: 提交一个主题（CSS）或插件（JS）到 PICKCAT Plus 创意工坊
+title: "[投稿] "
+labels: ["workshop"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢投稿！填完这个表单就够了，不需要 fork / 装 git。
+        细节规则见 [DEVELOPER.md](../blob/main/DEVELOPER.md)。
+        请确认你已经本地跑过 `node tools/validate.mjs`（全绿）。
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: 作品类型
+      options:
+        - 主题（纯 CSS，不执行代码）
+        - 插件（JS，跑在沙盒里）
+    validations:
+      required: true
+
+  - type: input
+    id: name
+    attributes:
+      label: 名字
+      placeholder: 薄荷海
+    validations:
+      required: true
+
+  - type: input
+    id: id
+    attributes:
+      label: id（小写字母/数字/._-，全局唯一，定了别改）
+      placeholder: theme-mint
+    validations:
+      required: true
+
+  - type: input
+    id: author
+    attributes:
+      label: 署名
+      placeholder: 你的名字或昵称
+    validations:
+      required: true
+
+  - type: textarea
+    id: desc
+    attributes:
+      label: 一句话简介（≤ 240 字）
+      placeholder: 深海薄荷渐变 + 圆角卡片，适合晚上看帖。
+    validations:
+      required: true
+
+  - type: textarea
+    id: code
+    attributes:
+      label: 代码内容（CSS 或 JS 全文，直接粘贴）
+      description: 插件请只贴单文件内容，不要贴打包产物。
+      render: text
+    validations:
+      required: true
+
+  - type: input
+    id: htmlclass
+    attributes:
+      label: 【主题】htmlClass
+      description: 样式挂载用的类名，只能字母数字 _-；不填会默认成 pickcat-theme-<id>
+      placeholder: pickcat-theme-mint
+
+  - type: textarea
+    id: apply
+    attributes:
+      label: 【主题】apply 设置（JSON）
+      description: 只允许 pickcatBgUrl / pickcatBgBase64 / pickcatMaskEnabled / pickcatCursor / pickcatCustomCursor
+      render: json
+      placeholder: |
+        {
+          "pickcatBgUrl": "linear-gradient(160deg,#0b3b3c,#0e6b63 45%,#082529)",
+          "pickcatMaskEnabled": false,
+          "pickcatCursor": "style3"
+        }
+
+  - type: checkboxes
+    id: perms
+    attributes:
+      label: 【插件】用到的权限（主题请跳过）
+      options:
+        - label: dom-read（读取帖子标题/正文）
+        - label: ui-interaction（加按钮、弹卡片）
+        - label: notify（弹提示）
+        - label: clipboard-write（写剪贴板）
+        - label: storage（存自己的配置）
+        - label: network（联网，必须在下面写域名白名单）
+
+  - type: textarea
+    id: hosts
+    attributes:
+      label: 【插件】hosts 白名单
+      description: 每行一个域名，例如 api.deepseek.com。没有 network 权限就留空。
+      placeholder: api.deepseek.com
+
+  - type: textarea
+    id: why
+    attributes:
+      label: 【插件】为什么需要这些权限
+      description: 一两句就够，审核主要看这里。
+      placeholder: 需要 network 调用 DeepSeek 的总结接口，只发正文不发别的。
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: 确认事项
+      options:
+        - label: 我确认这是我自己写的（或已获得授权），没有混淆代码、没有远程加载代码。
+          required: true
+        - label: 我不会用这个插件替用户代写正文（这是本项目的红线）。
+          required: true
+        - label: 我已在本地跑过 node tools/validate.mjs 并通过。
+          required: true
+        - label: 我同意以 MIT 协议随本仓库分发。
+          required: true
