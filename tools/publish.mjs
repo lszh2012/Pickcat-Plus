@@ -92,7 +92,7 @@ function buildItem(sub) {
 
     if (isTheme) {
         item.cssFile = PACKS + '/' + sub.id + '.css';
-        item.htmlClass = sub.htmlClass || ('pickcat-theme-' + sub.id);
+        item.htmlClass = sub.htmlClass || ('pickcat-theme-' + String(sub.id).replace(/^theme[-_]/i, ''));
         item.apply = sub.apply || {};
     } else {
         item.entry = PACKS + '/' + sub.id + '.js';
@@ -139,7 +139,7 @@ function main() {
 
     // ---- 2. 内容审计 ----
     if (sub.type === 'theme') {
-        const problems = auditCss(sub.code, { id: sub.id, htmlClass: sub.htmlClass || ('pickcat-theme-' + sub.id) });
+        const problems = auditCss(sub.code, { id: sub.id, htmlClass: sub.htmlClass || ('pickcat-theme-' + String(sub.id).replace(/^theme[-_]/i, '')) });
         const errors = problems.filter((p) => p.level === 'error');
         if (errors.length) {
             console.error(formatReport(sub.id, problems));
