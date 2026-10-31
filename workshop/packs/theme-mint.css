@@ -1,0 +1,52 @@
+/* 薄荷海 —— 社区主题示例
+   规则：只能写样式，不能引外部资源（url() 只允许 data:），不能 @import。
+   所有选择器都挂在 html.pickcat-theme-mint 下，卸载即整体失效。 */
+
+html.pickcat-theme-mint {
+    --mint-line: rgba(120, 240, 210, 0.18);
+    --mint-glow: rgba(80, 220, 190, 0.10);
+}
+
+html.pickcat-theme-mint body {
+    background-color: transparent !important;
+}
+
+/* 卡片：更圆、更透、更轻的边框 */
+html.pickcat-theme-mint article,
+html.pickcat-theme-mint .ui-card {
+    border-radius: 16px !important;
+    border: 1px solid var(--mint-line) !important;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28) !important;
+    backdrop-filter: blur(6px);
+}
+
+/* 悬停时轻微抬起 */
+html.pickcat-theme-mint article:hover {
+    transform: translateY(-2px);
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+    box-shadow: 0 12px 34px var(--mint-glow) !important;
+}
+
+/* 标签 / chips 描边 */
+html.pickcat-theme-mint a[href*="/tag"],
+html.pickcat-theme-mint [class*="chip"] {
+    border-radius: 999px !important;
+}
+
+/* 顶栏做一层磨砂 */
+html.pickcat-theme-mint header {
+    backdrop-filter: blur(14px);
+    background-color: rgba(6, 34, 36, 0.55) !important;
+}
+
+/* 选中文字用薄荷色 */
+html.pickcat-theme-mint ::selection {
+    background: rgba(88, 233, 200, 0.35);
+    color: #eafff9;
+}
+
+/* 滚动条 */
+html.pickcat-theme-mint ::-webkit-scrollbar-thumb {
+    background: rgba(88, 233, 200, 0.35) !important;
+    border-radius: 999px !important;
+}

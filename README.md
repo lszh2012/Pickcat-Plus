@@ -1,6 +1,6 @@
 # 🐾 PICKCAT Plus
 
-![Version](https://img.shields.io/badge/Version-v2.1.1-blue.svg)
+![Version](https://img.shields.io/badge/Version-v2.2.0-blue.svg)
 ![Manifest](https://img.shields.io/badge/Manifest-V3-purple.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 ![Build](https://img.shields.io/badge/build-none-lightgrey.svg)
@@ -129,6 +129,21 @@ v2.1.0 改了目录结构（新增 `sandbox.html` / `sandbox.js` / `workshop/`�
 
 ## 📝 更新日志
 
+### v2.2.0
+
+- 🌐 **创意工坊开放社区投稿**：工坊现在会从仓库拉取 `workshop/community.json`，社区主题 / 插件装完后自动出现在列表里，最长 24 小时更新一次；右上角新增「🌐 同步」按钮，想立刻刷新就点它。
+- 🌐 **零服务器**：清单和素材全部走 jsDelivr 的四个镜像域名，不需要任何后端，也不产生费用。
+- 🔒 **社区条目一律标「🌐 社区 · 未审核」**，安装前会弹权限清单并明确标注作者与来源。
+- 🔒 **社区插件必须带 `sha256`**：指纹对不上就拒绝运行，防止文件被篡改。
+- 🧹 **校验层**：主题 CSS 禁止 `@import` 和外部 `url()`、插件禁止 `eval` / `new Function` / `import` / `document` / 混淆代码、体积上限 200KB、hosts 白名单格式校验。
+- 📄 **新增开发者文档**：[DEVELOPER.md](DEVELOPER.md) + `tools/validate.mjs` 本地校验器 + Issue 投稿表单（不会 git 也能投稿）。
+- 🎨 内置两个示例社区主题：薄荷海、纸墨。
+
+### v2.1.2
+
+- 🐛 **修复**：自定义背景被站点内容盖住、只剩一条边露出来的问题。站点新版把背景画在一个带 `bg-muted` 的容器上，旧版写死的 `body / #root / .min-h-dvh` 全都匹配不到；现在改成**现场判定**——只挑「占屏幕 ≥70% 宽、≥50% 高且真的画了底色/背景图」的元素透明化（打 `data-pickcat-bg-strip` 标记），站点再改版也不用改代码。
+- ⚡ **改进**：透明化只作用于大背景层，不再有把卡片、Banner 一起扒掉的风险；关掉自定义背景时会整批摘掉标记，页面立刻还原。
+
 ### v2.1.1
 
 - 🐛 **修复**：设置自定义背景后，右下角大猫无论开关都看不见的问题。原因是「透明化页面上层容器」的 CSS 不管你有没有设背景都会被注入，把站点自己的背景层一起扒掉了；现在只在真的设了背景时才生效。
@@ -163,12 +178,19 @@ PICKCAT-Plus/
 │   ├── style1.png  style2.png
 │   └── style3.png  style6.png
 ├── icons/                            # 扩展图标
-└── workshop/                         # 创意工坊
-    ├── builtin.json                  # 内置清单（主题 + 插件）
-    └── packs/
-        ├── ai-summary.js             # AI 总结插件
-        └── theme-halloween.css       # 万圣夜惊魂皮肤
+├── workshop/                         # 创意工坊
+│   ├── builtin.json                  # 内置清单（官方自带）
+│   ├── community.json                # 社区清单（投稿改这里）
+│   └── packs/
+│       ├── ai-summary.js             # AI 总结插件
+│       ├── theme-halloween.css       # 万圣夜惊魂皮肤
+│       ├── theme-mint.css            # 薄荷海（社区示例）
+│       └── theme-paper.css           # 纸墨（社区示例）
+├── tools/validate.mjs                # 投稿本地校验器
+└── DEVELOPER.md                      # 开发者投稿指南
 ```
+
+想投稿？看 [DEVELOPER.md](DEVELOPER.md)：写完 `node tools/validate.mjs` 全绿，提个 Issue 就行，不用懂 git。
 
 没有构建步骤、没有 npm、没有依赖——`content.js` 一个文件就是全部逻辑，改完直接刷新扩展就能跑。
 

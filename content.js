@@ -94,6 +94,101 @@ function injectCursorStyle(cursorStyle, customBase64) {
     `;
 }
 
+// ==========================================
+// 自适应剥离站点「大背景层」
+// 站点每次改版都会换容器类名（2026-10 的新版把背景画在
+// div.flex.min-h-[var(--page-scroll-height,100dvh)]...bg-muted 上，
+// 老的 body / #root / .min-h-dvh 全都不匹配了），所以不再靠写死选择器，
+// 改成按「尺寸 + 实际计算出的背景」现场判定：占屏幕 ≥70% 宽、≥50% 高
+// 且真的画了底色/背景图的元素才打标记，CSS 只对带标记的元素透明化。
+// 标记是纯 attribute，随时可整批摘掉，不动任何 React 节点。
+// ==========================================
+const BG_STRIP_ATTR = 'data-pickcat-bg-strip';
+let bgStripActive = false;
+let bgStripObserver = null;
+let bgStripTimer = 0;
+
+function ensureBgStripStyle() {
+    let st = document.getElementById('pickcat-bg-strip-style');
+    if (!st) {
+        st = document.createElement('style');
+        st.id = 'pickcat-bg-strip-style';
+        st.textContent = `[${BG_STRIP_ATTR}="1"] { background-color: transparent !important; background-image: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }`;
+        (document.head || document.documentElement).appendChild(st);
+    }
+}
+
+function stripBigBackgrounds() {
+    if (!bgStripActive || !document.body) return 0;
+    const vw = window.innerWidth || 1280;
+    const vh = window.innerHeight || 800;
+    const minW = vw * 0.7;
+    const minH = vh * 0.5;
+    let budget = 900;
+    let hits = 0;
+    (function visit(el, depth) {
+        if (depth > 9 || budget <= 0) return;
+        const kids = el.children;
+        for (let i = 0; i < kids.length; i++) {
+            if (budget-- <= 0) return;
+            const child = kids[i];
+            if (!(child instanceof HTMLElement)) continue;
+            // 别碰我们自己的面板 / 主题提示层
+            if (child.id === 'pickcat-settings-host' || child.id === 'pickcat-ws-toast') continue;
+            const r = child.getBoundingClientRect();
+            if (r.width < minW || r.height < minH) continue;
+            const s = getComputedStyle(child);
+            const bgc = s.backgroundColor;
+            const paints = (bgc && bgc !== 'rgba(0, 0, 0, 0)' && bgc !== 'transparent')
+                || (s.backgroundImage && s.backgroundImage !== 'none');
+            if (paints) {
+                if (child.getAttribute(BG_STRIP_ATTR) !== '1') {
+                    child.setAttribute(BG_STRIP_ATTR, '1');
+                    hits++;
+                }
+            }
+            visit(child, depth + 1);
+        }
+    })(document.body, 0);
+    return hits;
+}
+
+function scheduleBgStrip(delay) {
+    if (bgStripTimer) clearTimeout(bgStripTimer);
+    bgStripTimer = setTimeout(() => {
+        bgStripTimer = 0;
+        try { stripBigBackgrounds(); } catch (e) { /* 布局未就绪时忽略 */ }
+    }, typeof delay === 'number' ? delay : 600);
+}
+
+function stopBgStrip() {
+    bgStripActive = false;
+    if (bgStripTimer) { clearTimeout(bgStripTimer); bgStripTimer = 0; }
+    if (bgStripObserver) {
+        try { bgStripObserver.disconnect(); } catch (e) { /* ignore */ }
+        bgStripObserver = null;
+    }
+    const marked = document.querySelectorAll('[' + BG_STRIP_ATTR + ']');
+    for (let i = 0; i < marked.length; i++) marked[i].removeAttribute(BG_STRIP_ATTR);
+    const st = document.getElementById('pickcat-bg-strip-style');
+    if (st) st.remove();
+}
+
+function startBgStrip() {
+    ensureBgStripStyle();
+    bgStripActive = true;
+    // 站点是 SPA，首屏/hydrate/换页都可能晚一步才画出背景层，多打几枪
+    [0, 400, 1200, 2600].forEach((d) => {
+        setTimeout(() => { if (bgStripActive) { try { stripBigBackgrounds(); } catch (e) { /* ignore */ } } }, d);
+    });
+    if (!bgStripObserver && document.body) {
+        bgStripObserver = new MutationObserver(() => {
+            if (bgStripActive) scheduleBgStrip(600);
+        });
+        bgStripObserver.observe(document.body, { childList: true, subtree: true });
+    }
+}
+
 function applyBackground(bgUrl, bgBase64, maskEnabled) {
     let finalUrl = bgBase64 ? bgBase64 : bgUrl;
     // 关键：只有真的设了自定义背景，才允许把站点的背景层扒掉。
@@ -129,11 +224,20 @@ function applyBackground(bgUrl, bgBase64, maskEnabled) {
         document.head.appendChild(style);
     }
     style.textContent = `
-        ${hasBg ? `body, #__next, #root, .min-h-dvh { background-color: transparent !important; background-image: none !important; }` : ''}
+        ${hasBg ? `body { background-color: transparent !important; background-image: none !important; }` : ''}
         .pickcat-grid-layout { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 12px !important; width: 100% !important; }
         .pickcat-category-listified { display: flex !important; flex-direction: column !important; gap: 12px !important; width: 100% !important; }
         [data-pickcat-hidden] { display: none !important; }
     `;
+
+    // 站点的大背景层靠「现场判定」处理，别写死类名（站点一改版就失效）
+    if (hasBg) {
+        // 已经在跑就只补一枪，别每次都重建 observer / 重排 4 个定时器
+        if (bgStripActive) scheduleBgStrip(0);
+        else startBgStrip();
+    } else {
+        stopBgStrip();
+    }
 }
 
 function applyHideCat(hide) {
@@ -956,6 +1060,8 @@ function createSettingsPanel() {
                     <div class="tab-content" id="tab-workshop">
                         <div class="ws-top">
                             <input type="text" class="ws-search" id="wsSearch" placeholder="搜索主题 / 插件 / 作者…">
+                            <button class="ws-btn" id="wsRefresh" title="从 jsDelivr 重新拉取社区清单"
+                                style="flex:0 0 auto; white-space:nowrap; padding:8px 10px; font-size:12px;">🌐 同步</button>
                         </div>
                         <div class="ws-status">
                             <span id="wsStatusText">已安装 0 个 · 运行中 0 个</span>
@@ -977,7 +1083,7 @@ function createSettingsPanel() {
 
                     <div class="tab-content" id="tab-about">
                         <div class="row-card" style="flex-direction: column; align-items: flex-start; gap: 12px;">
-                            <h3 style="margin:0; color:var(--text-main);">PICKCAT Plus v2.1.1</h3>
+                            <h3 style="margin:0; color:var(--text-main);">PICKCAT Plus v2.2.0</h3>
                             <p style="margin:0; font-size:13px; color:var(--text-muted); line-height:1.6;">
                                 一个由社区开发者手搓的非官方 PICKCAT 增强插件。<br>
                                 旨在提供更顺手、更沉浸的社区体验。
@@ -1577,17 +1683,236 @@ const Workshop = (function () {
         }, ms || 2600);
     }
 
-    /* ---------------- 清单 ---------------- */
+    /* ---------------- 清单（内置 + 社区远程，零服务器：GitHub + jsDelivr） ---------------- */
+
+    // 分支：仓库默认分支是 main；jsDelivr 对不存在的 @master 也会回落到默认分支，
+    // 所以两个 ref 都试（将来改分支名也不会挂）。四个域名是镜像轮换，某个被墙就试下一个。
+    const CDN_HOSTS = [
+        'https://cdn.jsdelivr.net',
+        'https://fastly.jsdelivr.net',
+        'https://gcore.jsdelivr.net',
+        'https://testingcf.jsdelivr.net'
+    ];
+    const CDN_REFS = ['@main', '@master'];
+    function cdnBases() {
+        const list = [];
+        for (let r = 0; r < CDN_REFS.length; r++) {
+            for (let h = 0; h < CDN_HOSTS.length; h++) {
+                list.push(CDN_HOSTS[h] + '/gh/lszh2012/Pickcat-Plus' + CDN_REFS[r] + '/');
+            }
+        }
+        return list;
+    }
+    const CATALOG_CACHE_KEY = 'pickcat_ws_catalog_cache';
+    const CATALOG_TTL = 24 * 60 * 60 * 1000;
+    const CATALOG_SOFT_TTL = 6 * 60 * 60 * 1000;
+    const CATALOG_LOCAL_TTL = 30 * 60 * 1000;
+    const APPLY_KEYS = ['pickcatBgUrl', 'pickcatBgBase64', 'pickcatMaskEnabled', 'pickcatCursor', 'pickcatCustomCursor'];
+    const ID_RE = /^[a-z0-9][a-z0-9._-]{1,48}$/;
+    const PATH_RE = /^[A-Za-z0-9._\/-]+$/;
+    const HOST_RE = /^(\*\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i;
+    let remoteMerged = 0;
+    let remoteSyncedAt = 0;
+
+    function str(v, max) {
+        return String(v == null ? '' : v).slice(0, max);
+    }
+
+    // 远程来的东西一律当不可信输入：字段白名单 + 长度上限 + 路径校验
+    function sanitizeItem(raw, base) {
+        if (!raw || typeof raw !== 'object') return null;
+        const id = str(raw.id, 50);
+        if (!ID_RE.test(id)) return null;
+        const type = raw.type === 'theme' ? 'theme' : (raw.type === 'plugin' ? 'plugin' : '');
+        if (!type) return null;
+
+        const item = {
+            id: id,
+            type: type,
+            name: str(raw.name, 40) || id,
+            emoji: str(raw.emoji, 8) || '📦',
+            category: str(raw.category, 20) || 'other',
+            author: str(raw.author, 40) || '匿名',
+            version: str(raw.version, 20) || '1.0.0',
+            desc: str(raw.desc, 240),
+            verified: 'unverified',        // 社区条目永远不能自称「官方 / 已审核」
+            source: 'community',
+            __base: base
+        };
+
+        if (type === 'theme') {
+            const src = (raw.apply && typeof raw.apply === 'object') ? raw.apply : {};
+            const apply = {};
+            APPLY_KEYS.forEach((k) => {
+                if (src[k] === undefined || src[k] === null) return;
+                if (k === 'pickcatMaskEnabled') { apply[k] = src[k] === true; return; }
+                const v = str(src[k], k === 'pickcatBgBase64' ? 200000 : 20000);
+                if (v) apply[k] = v;
+            });
+            item.apply = apply;
+            if (typeof raw.cssFile === 'string' && raw.cssFile.length <= 200 &&
+                PATH_RE.test(raw.cssFile) && /\.css$/i.test(raw.cssFile) && raw.cssFile.indexOf('..') === -1) {
+                item.cssFile = raw.cssFile;
+            }
+            if (typeof raw.css === 'string' && raw.css.length <= 65536) item.css = raw.css;
+            if (!item.cssFile && !item.css) return null;   // 主题必须有样式来源
+            item.htmlClass = (typeof raw.htmlClass === 'string' && /^[A-Za-z0-9_-]{1,60}$/.test(raw.htmlClass))
+                ? raw.htmlClass : ('pickcat-theme-' + id);
+            return item;
+        }
+
+        // 插件
+        const perms = Array.isArray(raw.permissions) ? raw.permissions.filter((p) => WS_PERM_DEFS[p]) : [];
+        const hosts = Array.isArray(raw.hosts)
+            ? raw.hosts.filter((h) => typeof h === 'string' && HOST_RE.test(h)).slice(0, 12) : [];
+        if (perms.indexOf('network') !== -1 && !hosts.length) return null;   // 要联网必须给白名单
+        item.permissions = perms;
+        item.hosts = hosts;
+
+        const codePath = (typeof raw.entry === 'string' && PATH_RE.test(raw.entry) && /\.js$/i.test(raw.entry)) ? raw.entry
+            : (typeof raw.url === 'string' && PATH_RE.test(raw.url) && /\.js$/i.test(raw.url) ? raw.url : '');
+        if (!codePath || codePath.indexOf('..') !== -1) return null;
+        item.entry = codePath;
+        if (typeof raw.sha256 === 'string' && /^[a-f0-9]{64}$/i.test(raw.sha256)) item.sha256 = raw.sha256.toLowerCase();
+
+        if (Array.isArray(raw.settings)) {
+            const fields = raw.settings.filter((f) => f && ID_RE.test(str(f.key, 50))).slice(0, 12).map((f) => ({
+                key: str(f.key, 50),
+                label: str(f.label, 40) || str(f.key, 50),
+                type: f.type === 'password' ? 'password' : 'text',
+                default: str(f.default, 300),
+                placeholder: str(f.placeholder, 60)
+            }));
+            if (fields.length) item.settings = fields;
+        }
+        return item;
+    }
+
+    // 绝对路径拼到条目自己的源上（内置用 chrome-extension://，社区用 jsDelivr）
+    function assetUrl(item, rel) {
+        if (!rel) return '';
+        if (item.__base) return item.__base + String(rel).replace(/^\.?\//, '');
+        return chrome.runtime.getURL(rel);
+    }
+
+    // 样式表的红线检查：CSS 也能干坏事（外链追踪、老 IE 的 expression 之类）
+    function cssProblem(css) {
+        if (!css) return '样式为空';
+        if (css.length > 65536) return '样式超过 64KB';
+        // 先去注释再查，否则注释里提一句 @import 就被误杀了
+        const body = css.replace(/\/\*[\s\S]*?\*\//g, '');
+        const banned = [/@import/i, /behavior\s*:/i, /expression\s*\(/i, /-moz-binding/i, /javascript\s*:/i, /<\/?script/i];
+        for (let i = 0; i < banned.length; i++) {
+            if (banned[i].test(body)) return '样式里含有被禁止的写法';
+        }
+        const urls = body.match(/url\(\s*['"]?[^)'"]*/gi) || [];
+        for (let i = 0; i < urls.length; i++) {
+            const v = urls[i].replace(/url\(\s*['"]?/i, '').trim();
+            if (!/^data:/i.test(v)) return '样式引用了外部资源';
+        }
+        return '';
+    }
+
+    async function fetchJson(url, ms) {
+        const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+        const timer = setTimeout(() => { if (ctrl) { try { ctrl.abort(); } catch (e) { /* ignore */ } } }, ms || 5000);
+        try {
+            const res = await fetch(url, ctrl ? { signal: ctrl.signal, cache: 'no-cache' } : {});
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return await res.json();
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+
+    async function fetchCommunity() {
+        let lastErr = null;
+        const bases = cdnBases();
+        for (let i = 0; i < bases.length; i++) {
+            const base = bases[i];
+            try {
+                const json = await fetchJson(base + 'workshop/community.json', 5000);
+                const raw = Array.isArray(json && json.items) ? json.items : [];
+                return { items: raw.slice(0, 200), base: base, updated: str(json && json.updated, 40), local: 0 };
+            } catch (e) {
+                lastErr = e;
+                console.warn('[pickcat-workshop] CDN 不可达：' + base, e && e.message || e);
+            }
+        }
+        // 四个镜像都挂了（或者仓库还没推上去）：退回扩展自带的 community.json，
+        // 这样刚装上的用户也能立刻看到社区主题，等 CDN 通了再自动换成最新的
+        try {
+            const res = await fetch(chrome.runtime.getURL('workshop/community.json'));
+            const json = await res.json();
+            const raw = Array.isArray(json && json.items) ? json.items : [];
+            console.warn('[pickcat-workshop] 已回退到本地 community.json（' + raw.length + ' 条）');
+            return { items: raw.slice(0, 200), base: '', updated: str(json && json.updated, 40), local: 1 };
+        } catch (e) {
+            throw lastErr || e;
+        }
+    }
+
+    function applyCommunity(payload, builtinIds) {
+        const kept = catalog.filter((i) => i.source !== 'community');
+        const items = (payload.items || []).filter((i) => i && i.id && !builtinIds[i.id]);
+        catalog = kept.concat(items);
+        remoteMerged = items.length;
+        remoteSyncedAt = payload.at || 0;
+    }
+
+    async function refreshCommunity(builtinIds) {
+        try {
+            const got = await fetchCommunity();
+            const builtin = builtinIds || {};
+            if (!builtinIds) {
+                catalog.forEach((i) => { if (i.source !== 'community') builtin[i.id] = 1; });
+            }
+            const items = [];
+            const seen = {};
+            got.items.forEach((raw) => {
+                const it = sanitizeItem(raw, got.base);
+                if (!it || seen[it.id] || builtin[it.id]) return;
+                seen[it.id] = 1;
+                items.push(it);
+            });
+            const payload = { at: Date.now(), base: got.base, updated: got.updated, local: got.local ? 1 : 0, items: items };
+            applyCommunity(payload, builtin);
+            await set({ [CATALOG_CACHE_KEY]: payload });
+            render();
+            return 'ok';
+        } catch (e) {
+            console.warn('[pickcat-workshop] 社区清单拉取失败：', e);
+            return 'fail';
+        }
+    }
 
     async function loadCatalog() {
+        // 1) 内置清单：永远可用，社区挂了也不影响
         try {
             const res = await fetch(chrome.runtime.getURL('workshop/builtin.json'));
             const json = await res.json();
-            catalog = Array.isArray(json.items) ? json.items : [];
+            catalog = (Array.isArray(json.items) ? json.items : []).map((i) => Object.assign({ source: 'builtin', __base: '' }, i));
         } catch (e) {
             catalog = [];
             toast('工坊清单加载失败：' + (e && e.message || e));
         }
+        const builtinIds = {};
+        catalog.forEach((i) => { builtinIds[i.id] = 1; });
+
+        // 2) 社区清单：先用缓存，过期再拉（拉失败就静默只有内置）
+        try {
+            const cached = (await get([CATALOG_CACHE_KEY]))[CATALOG_CACHE_KEY];
+            // 本地回退的缓存只信 30 分钟，之后就重试 CDN（万一只是网络抖动）
+            const ttl = cached && cached.local ? CATALOG_LOCAL_TTL : CATALOG_TTL;
+            if (cached && Array.isArray(cached.items) && Date.now() - (cached.at || 0) < ttl) {
+                const stamped = cached.items.map((i) => Object.assign({ at: cached.at }, i));
+                applyCommunity({ items: stamped, at: cached.at }, builtinIds);
+                if (Date.now() - (cached.at || 0) > CATALOG_SOFT_TTL) refreshCommunity(builtinIds);
+                return;
+            }
+        } catch (e) { /* 缓存坏了就当没有 */ }
+
+        await refreshCommunity(builtinIds);
     }
 
     function itemById(id) {
@@ -1625,6 +1950,7 @@ const Workshop = (function () {
     function badgeOf(item) {
         if (item.verified === 'official') return '<span class="ws-badge">✅ 官方</span>';
         if (item.verified === 'reviewed') return '<span class="ws-badge">✅ 已审核</span>';
+        if (item.source === 'community') return '<span class="ws-badge warn">🌐 社区 · 未审核</span>';
         return '<span class="ws-badge warn">⚠️ 未审核</span>';
     }
 
@@ -1640,8 +1966,10 @@ const Workshop = (function () {
     function cardHtml(item) {
         const inst = isInstalled(item.id);
         const rec = state.installed[item.id] || {};
-        const preview = item.preview && item.preview.bg
-            ? `<div class="ws-preview" style="background:${esc(item.preview.bg)}"></div>` : '';
+        // 没有 preview.bg 时，用主题自带的渐变直接画缩略图（零额外请求）
+        const gradBg = /gradient\(/i.test(String((item.apply || {}).pickcatBgUrl || '')) ? item.apply.pickcatBgUrl : '';
+        const previewBg = (item.preview && item.preview.bg) || gradBg;
+        const preview = previewBg ? `<div class="ws-preview" style="background:${esc(previewBg)}"></div>` : '';
 
         let actions = '';
         if (!inst) {
@@ -1692,7 +2020,12 @@ const Workshop = (function () {
             : '<div class="ws-empty">没找到匹配的条目<br>换个关键词试试？</div>';
 
         const total = Object.keys(state.installed).length;
-        els.status.textContent = `已安装 ${total} 个 · 运行中 ${runningCount()} 个`;
+        let line = `已安装 ${total} 个 · 运行中 ${runningCount()} 个`;
+        if (remoteMerged) {
+            const mins = remoteSyncedAt ? Math.max(0, Math.round((Date.now() - remoteSyncedAt) / 60000)) : -1;
+            line += ` · 🌐 社区 ${remoteMerged} 个` + (mins >= 0 ? `（${mins} 分钟前同步）` : '');
+        }
+        els.status.textContent = line;
         els.safeMode.checked = !!state.safeMode;
 
         Array.prototype.forEach.call(els.chips.children, (c) => {
@@ -1741,8 +2074,11 @@ const Workshop = (function () {
                 ? '这是一个主题包，纯数据、不含代码，会覆盖你当前的背景/指针设置（卸载时会还原）。'
                 : '这是一个功能插件，代码将运行在受限沙盒里。它申请了以下能力：';
 
+            const communityWarn = item.source === 'community'
+                ? `<div class="ws-perm high"><span>🌐</span><span class="ws-perm-txt"><b>社区内容，非官方</b><br>来自社区作者「${esc(item.author)}」，我们只做了自动检查，没有人工逐行审核。出问题请在工坊里卸载。</span></div>`
+                : '';
             if (item.type === 'theme') {
-                els.modalList.innerHTML = '<div class="ws-perm"><span class="ws-perm-txt">🎨 修改背景图 / 遮罩 / 鼠标指针</span></div>';
+                els.modalList.innerHTML = communityWarn + '<div class="ws-perm"><span class="ws-perm-txt">🎨 修改背景图 / 遮罩 / 鼠标指针</span></div>';
             } else {
                 const perms = (item.permissions || []).map((p) => {
                     const d = WS_PERM_DEFS[p] || { level: 'low', icon: '·', label: p, desc: '' };
@@ -1753,7 +2089,7 @@ const Workshop = (function () {
                 const hosts = (item.hosts || []).length
                     ? `<div class="ws-perm high"><span>🌐</span><span class="ws-perm-txt"><b>可访问的域名</b><br>${esc(item.hosts.join('、'))}</span></div>`
                     : '';
-                els.modalList.innerHTML = perms + hosts;
+                els.modalList.innerHTML = communityWarn + perms + hosts;
             }
 
             pendingConfirm = resolve;
@@ -1782,11 +2118,14 @@ const Workshop = (function () {
         if (item.css) return String(item.css);
         if (!item.cssFile) return '';
         if (skinCssCache && skinCssCache.id === item.id) return skinCssCache.css;
-        const res = await fetch(chrome.runtime.getURL(item.cssFile));
+        const url = assetUrl(item, item.cssFile);
+        const res = await fetch(url, { cache: 'no-cache' });
         if (!res.ok) throw new Error('HTTP ' + res.status);
-        const css = await res.text();
+        const raw = await res.text();
+        const bad = cssProblem(raw);
+        if (bad) throw new Error(bad);
         // 防止样式表里塞 </style> 提前闭合标签
-        skinCssCache = { id: item.id, css: css.replace(/<\/style/gi, '<\\/style') };
+        skinCssCache = { id: item.id, css: raw.replace(/<\/style/gi, '<\\/style') };
         return skinCssCache.css;
     }
 
@@ -1824,7 +2163,15 @@ const Workshop = (function () {
             const prev = {};
             keys.forEach((k) => { prev[k] = prevRes[k]; });
             await set(item.apply || {});
-            await applySkin(item);
+            const skinOk = await applySkin(item);
+            if (!skinOk) {
+                // 样式表没加载 / 没过审：别把设置改到半截状态
+                const back = {};
+                Object.keys(prev).forEach((k) => { back[k] = prev[k] === undefined ? '' : prev[k]; });
+                if (Object.keys(back).length) await set(back);
+                loadAllConfigs();
+                return;
+            }
             state.installed[item.id] = { type: 'theme', version: item.version, prev: prev, at: Date.now() };
         } else {
             state.installed[item.id] = {
@@ -2177,17 +2524,36 @@ const Workshop = (function () {
 
     /* ---------------- 启动插件 ---------------- */
 
+    async function sha256Hex(text) {
+        try {
+            if (!(window.crypto && window.crypto.subtle && window.TextEncoder)) return '';
+            const buf = await window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+            return Array.prototype.map.call(new Uint8Array(buf), (b) => ('00' + b.toString(16)).slice(-2)).join('');
+        } catch (e) {
+            return '';
+        }
+    }
+
     async function loadPluginCode(item) {
-        if (item.entry) {
-            const res = await fetch(chrome.runtime.getURL(item.entry));
-            if (!res.ok) throw new Error('读取插件代码失败：' + res.status);
-            return await res.text();
+        let url = '';
+        if (item.entry) url = assetUrl(item, item.entry);
+        else if (item.url) url = assetUrl(item, item.url);
+        if (!url) throw new Error('该插件没有代码入口');
+
+        const res = await fetch(url, { cache: 'no-cache' });
+        if (!res.ok) throw new Error('读取插件代码失败：' + res.status);
+        const code = await res.text();
+        if (!code || code.length > 200 * 1024) throw new Error('插件代码为空或超过 200KB');
+
+        // 社区插件带 sha256 时必须对得上，防止 CDN 上的内容被换掉
+        if (item.sha256) {
+            const got = await sha256Hex(code);
+            if (!got) throw new Error('本环境不支持指纹校验，已拒绝运行');
+            if (got !== item.sha256) throw new Error('代码指纹不匹配（清单写的是 ' + item.sha256.slice(0, 8) + '…，实际 ' + got.slice(0, 8) + '…）');
+        } else if (item.source === 'community') {
+            throw new Error('社区插件必须在清单里提供 sha256');
         }
-        if (item.url) {
-            // 阶段 2 会改成“沙盒代取 + 指纹校验”，阶段 1 先只支持本地官方包
-            throw new Error('远程插件将在阶段 2 支持');
-        }
-        throw new Error('该插件没有代码入口');
+        return code;
     }
 
     async function runPlugins() {
@@ -2250,6 +2616,17 @@ const Workshop = (function () {
 
         els.safeMode.addEventListener('change', () => setSafeMode(els.safeMode.checked));
 
+        if (els.refresh) {
+            els.refresh.addEventListener('click', async () => {
+                els.refresh.disabled = true;
+                els.refresh.textContent = '同步中…';
+                const r = await refreshCommunity(null);
+                els.refresh.disabled = false;
+                els.refresh.textContent = '🌐 同步';
+                toast(r === 'ok' ? `社区清单已同步，新增 ${remoteMerged} 个条目` : '社区清单同步失败，先用内置内容');
+            });
+        }
+
         els.grid.addEventListener('click', (ev) => {
             const btn = ev.target.closest ? ev.target.closest('button[data-act]') : null;
             if (!btn) return;
@@ -2290,6 +2667,7 @@ const Workshop = (function () {
         els.search = root.getElementById('wsSearch');
         els.safeMode = root.getElementById('wsSafeMode');
         els.status = root.getElementById('wsStatusText');
+        els.refresh = root.getElementById('wsRefresh');
         if (!els.grid) return;
 
         bind();
