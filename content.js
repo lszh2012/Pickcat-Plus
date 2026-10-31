@@ -1317,7 +1317,7 @@ function createSettingsPanel() {
 
                     <div class="tab-content" id="tab-about">
                         <div class="row-card" style="flex-direction: column; align-items: flex-start; gap: 12px;">
-                            <h3 style="margin:0; color:var(--text-main);">PICKCAT Plus v2.2.2</h3>
+                            <h3 style="margin:0; color:var(--text-main);">PICKCAT Plus v2.2.3</h3>
                             <p style="margin:0; font-size:13px; color:var(--text-muted); line-height:1.6;">
                                 一个由社区开发者手搓的非官方 PICKCAT 增强插件。<br>
                                 旨在提供更顺手、更沉浸的社区体验。
@@ -2101,7 +2101,7 @@ const Workshop = (function () {
             // （官方示例 theme-neon 就是只有 apply、没有 CSS 的最简形态）
             if (!item.cssFile && !item.css && !Object.keys(item.apply).length) return null;
             item.htmlClass = (typeof raw.htmlClass === 'string' && /^[A-Za-z0-9_-]{1,60}$/.test(raw.htmlClass))
-                ? raw.htmlClass : ('pickcat-theme-' + id);
+                ? raw.htmlClass : ('pickcat-theme-' + String(id).replace(/^theme[-_]/i, ''));
             return item;
         }
 
@@ -2762,7 +2762,7 @@ const Workshop = (function () {
     let skinCssCache = null;
 
     function skinClassOf(item) {
-        return item && item.htmlClass ? item.htmlClass : 'pickcat-theme-' + (item ? item.id : '');
+        return item && item.htmlClass ? item.htmlClass : 'pickcat-theme-' + String(item ? item.id : '').replace(/^theme[-_]/i, '');
     }
 
     function removeSkin() {

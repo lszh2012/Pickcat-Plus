@@ -1,6 +1,6 @@
 # 🐾 PICKCAT Plus
 
-![Version](https://img.shields.io/badge/Version-v2.2.2-blue.svg)
+![Version](https://img.shields.io/badge/Version-v2.2.3-blue.svg)
 ![Manifest](https://img.shields.io/badge/Manifest-V3-purple.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 ![Build](https://img.shields.io/badge/build-none-lightgrey.svg)
@@ -164,6 +164,12 @@ v2.1.0 改了目录结构（新增 `sandbox.html` / `sandbox.js` / `workshop/`�
 ---
 
 ## 📝 更新日志
+
+### v2.2.3
+
+- 🐛 **修复列表模式下创作入口图标空白**：站点的图标是 `<img srcset="…">`，克隆节点后只改 `src` 不生效（浏览器优先按 `srcset` 取图），现在会先摘掉 `srcset` / `sizes` / `loading`，并补上 `data-image-state="loaded"`。
+- 🐛 **修复自动上架「假成功」**：CI 里 `node … | tee` 取的是 `tee` 的退出码，所以脚本失败、job 却报绿，还会回一条「已上架」。现在开 `set -o pipefail`，失败会真的走失败分支并回错误表。
+- 🐛 **修复默认 htmlClass 拼成双前缀**：id 叫 `theme-xxx` 时，默认类名从 `pickcat-theme-theme-xxx` 改为 `pickcat-theme-xxx`，与文档、以及作者手写的选择器保持一致。
 
 ### v2.2.2
 
