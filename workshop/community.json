@@ -39,6 +39,25 @@
         "pickcatCursor": "default",
         "pickcatCustomCursor": ""
       }
+    },
+    {
+      "id": "theme-testlab",
+      "type": "theme",
+      "name": "测试实验室",
+      "emoji": "🧪",
+      "category": "dark",
+      "author": "lszh2012",
+      "version": "0.0.1",
+      "desc": "仅用于验证投稿链路：青色虚线描边 + 绿色虚线链接下划线。验证完可删。",
+      "cssFile": "workshop/packs/theme-testlab.css",
+      "htmlClass": "pickcat-theme-testlab",
+      "apply": {
+        "pickcatBgUrl": "linear-gradient(160deg,#2a0f3d,#4b1050 45%,#12061c)",
+        "pickcatBgBase64": "",
+        "pickcatMaskEnabled": false,
+        "pickcatCursor": "style2",
+        "pickcatCustomCursor": ""
+      }
     }
   ]
 }
