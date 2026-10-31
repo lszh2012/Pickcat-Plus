@@ -1683,25 +1683,22 @@ const Workshop = (function () {
         }, ms || 2600);
     }
 
-    /* ---------------- 清单（内置 + 社区远程，零服务器：GitHub + jsDelivr） ---------------- */
+    /* ---------------- 清单（内置 + 社区远程，零服务器：GitHub raw + jsDelivr 兜底） ---------------- */
 
-    // 分支：仓库默认分支是 main；jsDelivr 对不存在的 @master 也会回落到默认分支，
-    // 所以两个 ref 都试（将来改分支名也不会挂）。四个域名是镜像轮换，某个被墙就试下一个。
-    const CDN_HOSTS = [
-        'https://cdn.jsdelivr.net',
-        'https://fastly.jsdelivr.net',
-        'https://gcore.jsdelivr.net',
-        'https://testingcf.jsdelivr.net'
+    // 源顺序很重要：raw.githubusercontent 的缓存只有 5 分钟，推完等一会儿就能拿到新的；
+    // jsDelivr 边缘缓存 12 小时（s-maxage=43200）且换 query 串也不刷新，只能靠 purge 工具，
+    // 所以它退到最后当兜底 —— raw 被墙的用户照样能用。
+    const CDN_BASES = [
+        'https://raw.githubusercontent.com/lszh2012/Pickcat-Plus/main/',
+        'https://raw.githubusercontent.com/lszh2012/Pickcat-Plus/master/',
+        'https://cdn.jsdelivr.net/gh/lszh2012/Pickcat-Plus@main/',
+        'https://fastly.jsdelivr.net/gh/lszh2012/Pickcat-Plus@main/',
+        'https://gcore.jsdelivr.net/gh/lszh2012/Pickcat-Plus@main/',
+        'https://testingcf.jsdelivr.net/gh/lszh2012/Pickcat-Plus@main/'
     ];
-    const CDN_REFS = ['@main', '@master'];
+    // 手动「同步」时再加两个冷门镜像，尽量把最新内容捞回来
     function cdnBases() {
-        const list = [];
-        for (let r = 0; r < CDN_REFS.length; r++) {
-            for (let h = 0; h < CDN_HOSTS.length; h++) {
-                list.push(CDN_HOSTS[h] + '/gh/lszh2012/Pickcat-Plus' + CDN_REFS[r] + '/');
-            }
-        }
-        return list;
+        return CDN_BASES.slice();
     }
     const CATALOG_CACHE_KEY = 'pickcat_ws_catalog_cache';
     const CATALOG_TTL = 24 * 60 * 60 * 1000;
@@ -1871,7 +1868,12 @@ const Workshop = (function () {
             const seen = {};
             got.items.forEach((raw) => {
                 const it = sanitizeItem(raw, got.base);
-                if (!it || seen[it.id] || builtin[it.id]) return;
+                if (!it) {
+                    // 方便投稿者自查：坏条目会被静默丢掉，但控制台留个线索
+                    console.warn('[pickcat-workshop] 丢弃不合格的社区条目：', raw && raw.id, raw && (raw.cssFile || raw.entry));
+                    return;
+                }
+                if (seen[it.id] || builtin[it.id]) return;
                 seen[it.id] = 1;
                 items.push(it);
             });
