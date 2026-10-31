@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-10-31T22:20:00Z",
+  "updated": "2026-10-31T22:35:00Z",
   "items": [
     {
       "id": "theme-mint",
@@ -19,6 +19,28 @@
         "pickcatBgBase64": "",
         "pickcatMaskEnabled": false,
         "pickcatCursor": "style3",
+        "pickcatCustomCursor": ""
+      }
+    },
+    {
+      "id": "theme-neon",
+      "type": "theme",
+      "name": "暗夜霓虹",
+      "emoji": "🌃",
+      "category": "theme",
+      "author": "PICKCAT Plus 示例",
+      "version": "1.0.0",
+      "verified": "official",
+      "mode": "dark",
+      "desc": "深蓝夜到墨黑的径向渐变，不压灰纱，暗色里最通透的一款。同时是工坊的示例条目：只有 apply、没有 CSS 文件，照着它抄就能写自己的主题。",
+      "preview": {
+        "bg": "radial-gradient(120% 90% at 20% 0%, #1b2a4a 0%, #0b1020 55%, #05060d 100%)"
+      },
+      "apply": {
+        "pickcatBgUrl": "radial-gradient(120% 90% at 20% 0%, #1b2a4a 0%, #0b1020 55%, #05060d 100%)",
+        "pickcatBgBase64": "",
+        "pickcatMaskEnabled": false,
+        "pickcatCursor": "style2",
         "pickcatCustomCursor": ""
       }
     }
