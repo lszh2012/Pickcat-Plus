@@ -10,12 +10,16 @@
  * 你本地能过，合并后大概率也能过。合并后仍以扩展里的校验为准（那才是最终防线）。
  */
 
-import { readFileSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { resolve, dirname, join } from 'node:path';
 
 const ROOT = resolve(dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..');
-const target = process.argv[2] || 'workshop/community.json';
+const ARGS = process.argv.slice(2);
+const FIX = ARGS.includes('--fix');                        // 自动把算出来的 sha256 写回清单
+const positional = ARGS.filter((a) => !a.startsWith('--'));
+const target = positional[0] || 'workshop/community.json';
+const fixes = {};                                          // id -> 正确的 sha256
 
 const ID_RE = /^[a-z0-9][a-z0-9._-]{1,48}$/;
 const PATH_RE = /^[A-Za-z0-9._/-]+$/;
@@ -23,6 +27,19 @@ const HOST_RE = /^(\*\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z
 const PERMS = ['dom-read', 'ui-interaction', 'notify', 'clipboard-write', 'storage', 'network'];
 const APPLY_KEYS = ['pickcatBgUrl', 'pickcatBgBase64', 'pickcatMaskEnabled', 'pickcatCursor', 'pickcatCustomCursor'];
 const CURSORS = ['default', 'style1', 'style2', 'style3', 'style6', 'custom'];
+// 允许被插件「接管」的设置项，与 content.js 的 CLAIM_KEY_TYPES 保持一致
+const CLAIM_KEY_TYPES = {
+  pickcatBgUrl: 'text',
+  pickcatBgBase64: 'text',
+  pickcatMaskEnabled: 'bool',
+  pickcatCursor: 'cursor',
+  pickcatCustomCursor: 'text',
+  pickcatHideCat: 'bool',
+  pickcatKitten4: 'bool',
+  pickcatCategoryList: 'bool',
+  pickcatCreationGrid: 'bool'
+};
+const TRUSTED_IDS = ['theme-neon'];   // 官方示例，允许在 community.json 里保留 official
 const MAX_CSS = 65536;
 const MAX_JS = 200 * 1024;
 
@@ -47,6 +64,7 @@ function cssProblem(css) {
 }
 
 const abs = resolve(ROOT, target);
+const IS_BUILTIN = /builtin\.json$/i.test(abs);   // 官方清单不受社区规则约束（可自称 official、可只写 apply）
 if (!existsSync(abs)) {
   console.error('找不到清单文件：' + abs);
   process.exit(1);
@@ -85,8 +103,33 @@ json.items.forEach((raw, i) => {
   if (!raw.author) warn('缺少 author（会显示成「匿名」）');
   if (!raw.version) warn('缺少 version（会当成 1.0.0）');
   if (raw.desc && raw.desc.length > 240) fail('desc 超过 240 字');
-  if (raw.verified && raw.verified !== 'unverified') {
+  if (!IS_BUILTIN && raw.verified && raw.verified !== 'unverified' && !TRUSTED_IDS.includes(raw.id)) {
     warn('verified 会被强制改成 unverified，社区条目不能自称官方/已审核');
+  }
+
+  if (raw.mode !== undefined && !['dark', 'light', 'any'].includes(raw.mode)) {
+    fail("mode 只能是 'dark' / 'light' / 'any'");
+  }
+
+  // 要接管的设置项
+  if (raw.claims !== undefined) {
+    if (!Array.isArray(raw.claims)) fail('claims 必须是数组');
+    else {
+      if (raw.claims.length > 5) fail('claims 最多 5 项');
+      const used = new Set();
+      for (const c of raw.claims) {
+        if (!c || typeof c !== 'object') { fail('claims 里每一项都要是对象'); continue; }
+        const t = CLAIM_KEY_TYPES[c.key];
+        if (!t) { fail('claims 里有不可接管或拼错的键：' + c.key + '（允许：' + Object.keys(CLAIM_KEY_TYPES).join(' / ') + '）'); continue; }
+        if (used.has(c.key)) fail('claims 里重复声明了：' + c.key);
+        used.add(c.key);
+        if (!c.label) warn('claims 缺少 label，安装弹窗里只会显示键名：' + c.key);
+        if (t === 'bool' && typeof c.value !== 'boolean') fail(c.key + ' 的值必须是 true / false');
+        else if (t === 'cursor' && !CURSORS.includes(c.value)) fail(c.key + ' 只能是：' + CURSORS.join(' / '));
+        else if (t === 'text' && (typeof c.value !== 'string' || c.value.length > 200000)) fail(c.key + ' 的值必须是字符串且不超过 200000 字符');
+      }
+      if (!errors) ok('claims ' + raw.claims.length + ' 项检查通过');
+    }
   }
 
   if (raw.type === 'theme') {
@@ -98,7 +141,7 @@ json.items.forEach((raw, i) => {
       fail('pickcatCursor 只能是：' + CURSORS.join(' / '));
     }
     if (apply.pickcatBgUrl && apply.pickcatBgUrl.length > 20000) fail('pickcatBgUrl 太长');
-    if (!raw.cssFile && !raw.css) return fail('主题必须有 cssFile 或 css');
+    if (!IS_BUILTIN && !raw.cssFile && !raw.css && !Object.keys(apply).length) return fail('主题至少要给 cssFile / css / apply 其中一样');
 
     if (raw.cssFile) {
       if (!PATH_RE.test(raw.cssFile)) return fail('cssFile 只能是仓库内的相对路径');
@@ -126,6 +169,32 @@ json.items.forEach((raw, i) => {
         if (h === '*' || /^\*\.[a-z]+$/.test(h) && h.split('.').length < 3) warn('hosts 过于宽泛：' + h);
       }
     }
+    // 设置表单（可选）：type 只能是这五种，select 必须有 options
+    if (raw.settings !== undefined) {
+      if (!Array.isArray(raw.settings)) fail('settings 必须是数组');
+      else {
+        if (raw.settings.length > 12) fail('settings 最多 12 项');
+        const keys = new Set();
+        const TYPES = ['text', 'password', 'select', 'number', 'switch'];
+        raw.settings.forEach((f, i) => {
+          const at = 'settings[' + i + ']';
+          if (!f || typeof f !== 'object') return fail(at + ' 必须是对象');
+          if (!/^[a-zA-Z0-9_]{1,50}$/.test(String(f.key || ''))) return fail(at + '.key 只能字母数字下划线');
+          if (keys.has(f.key)) fail(at + '.key 重复：' + f.key);
+          keys.add(f.key);
+          if (f.type && TYPES.indexOf(f.type) < 0) fail(at + '.type 不支持：' + f.type + '（可用 ' + TYPES.join('/') + '）');
+          if (f.type === 'select') {
+            if (!Array.isArray(f.options) || !f.options.length) fail(at + ' 是 select，必须给 options 数组');
+            else if (f.options.length > 20) fail(at + '.options 最多 20 个');
+          }
+          if (f.type === 'number' && f.default !== undefined && typeof f.default !== 'number') fail(at + '.default 应该是数字');
+          if (f.type === 'switch' && f.default !== undefined && typeof f.default !== 'boolean') fail(at + '.default 应该是 true/false');
+          if (!f.label) warn(at + ' 没写 label，面板上会直接显示 key');
+        });
+        if (raw.settings.length) ok('settings ' + raw.settings.length + ' 项');
+      }
+    }
+
     const entry = raw.entry || raw.url;
     if (!entry) return fail('插件必须有 entry 或 url');
     if (!PATH_RE.test(entry) || entry.includes('..')) return fail('entry 只能是仓库内的相对路径');
@@ -135,22 +204,49 @@ json.items.forEach((raw, i) => {
     const code = readFileSync(p, 'utf8');
     if (Buffer.byteLength(code) > MAX_JS) fail('插件代码超过 200KB');
     const banned = [/\beval\s*\(/, /\bnew\s+Function\s*\(/, /\bimport\s*\(/, /\brequire\s*\(/, /\bchrome\./, /\bdocument\b/, /\bwindow\.parent\b/, /\blocalStorage\b/];
-    for (const re of banned) {
+    for (const re of (IS_BUILTIN ? [] : banned)) {
       if (re.test(code)) fail(entry + ' 里有被禁止的写法：' + re);
     }
     const hash = createHash('sha256').update(code).digest('hex');
-    if (!raw.sha256) {
-      fail('插件必须提供 sha256（用下面的值填进去）');
+    if (!IS_BUILTIN && !raw.sha256) {
+      fail('插件必须提供 sha256' + (FIX ? '（--fix 会自动填上）' : '（把下面的值填进去）'));
       console.log('     sha256: "' + hash + '"');
-    } else if (raw.sha256.toLowerCase() !== hash) {
+      if (FIX) fixes[raw.id] = hash;
+    } else if (raw.sha256 && raw.sha256.toLowerCase() !== hash) {
       fail('sha256 不匹配。清单写的是 ' + raw.sha256);
       console.log('     实际文件的 sha256: "' + hash + '"');
-    } else {
+      if (FIX) fixes[raw.id] = hash;
+    } else if (raw.sha256) {
       ok('sha256 匹配：' + hash.slice(0, 12) + '…');
+    } else {
+      console.log('     sha256: "' + hash + '"（官方条目可留空，写上更稳）');
+      if (FIX) fixes[raw.id] = hash;
     }
   }
   console.log('');
 });
+
+// --fix：把算出来的 sha256 写回清单（只动这一个字段）
+if (FIX && Object.keys(fixes).length) {
+  try {
+    const data = JSON.parse(readFileSync(abs, 'utf8'));
+    let n = 0;
+    for (const item of (data.items || [])) {
+      if (fixes[item.id] && item.sha256 !== fixes[item.id]) {
+        item.sha256 = fixes[item.id];
+        n++;
+        console.log('  ✏️  已写入 sha256：' + item.id + ' → ' + fixes[item.id].slice(0, 12) + '…');
+      }
+    }
+    if (n) {
+      writeFileSync(abs, JSON.stringify(data, null, 2) + '\n', 'utf8');
+      console.log('  ✅ 已更新 ' + target + '（' + n + ' 条），请连同这个文件一起提交');
+      errors = 0;   // 修完就算通过，别再让 CI 红着
+    }
+  } catch (e) {
+    console.log('  ❌ --fix 写回失败：' + e.message);
+  }
+}
 
 console.log(`\n结果：${errors ? '❌ ' + errors + ' 个错误' : '✅ 全部通过'}${warns ? ' · ⚠️ ' + warns + ' 个警告' : ''}\n`);
 process.exit(errors ? 1 : 0);

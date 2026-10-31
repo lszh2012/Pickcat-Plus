@@ -1,6 +1,6 @@
 # 🐾 PICKCAT Plus
 
-![Version](https://img.shields.io/badge/Version-v2.2.0-blue.svg)
+![Version](https://img.shields.io/badge/Version-v2.2.1-blue.svg)
 ![Manifest](https://img.shields.io/badge/Manifest-V3-purple.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 ![Build](https://img.shields.io/badge/build-none-lightgrey.svg)
@@ -18,6 +18,14 @@
 4. **不碰你的数据**：所有设置都在本机 `chrome.storage.local` 里。创意工坊的第三方插件跑在隔离沙盒里，拿不到 `chrome.*` 和页面 DOM。
 
 ---
+
+## 🛡 使用前的三句话
+
+1. **本扩展不是点猫官方产品**，是社区作者自制的第三方工具；工坊里的主题/插件更是**第三方作者**做的，本扩展只做自动化检查，不做逐行人工审核。
+2. **主题是纯数据**（背景色/指针/几条设置），不执行代码；**插件是会跑的代码**，但跑在沙盒里——看不到你的账号、Cookie、输入内容，也读不到网页。
+3. 插件联网只能走扩展代发，且必须申报域名白名单；你填进插件的 Key 会按需发给**它申报的那个域名**。所以：只装你愿意相信的作者，别填你输不起的东西。
+
+第一次打开「创意工坊」时会弹一次免责说明，需要勾选同意才能继续。任何时候都可以在工坊里一键卸载，或打开「⛑ 安全模式」全部停用。
 
 ## ✨ 功能
 
@@ -44,10 +52,13 @@
 
 内置内容：
 
-- 🌸 **樱花春日** —— 粉樱渐变 + 亮色柔纱
-- 🌃 **暗夜霓虹** —— 深蓝到墨黑，暗色里最通透
 - 🎃 **万圣夜惊魂** —— 明月、蝙蝠、幽灵剪影铺满夜色，南瓜橙描边卡片（作者：**Helen.S**）
 - ✨ **AI 总结** —— 帖子页左下角点一下，把正文缩成 3–5 条要点。自带 Key，直连 DeepSeek / OpenAI / Kimi / 通义，不经过任何中转服务器。
+
+社区清单里的示例条目（`workshop/community.json`）：
+
+- 🌃 **暗夜霓虹**（PICKCAT Plus 示例）—— 深蓝到墨黑，暗色里最通透；**只有 `apply`、没有 CSS 文件**，是最简形态的模板
+- 🌿 **薄荷海**（PICKCAT Plus 示例）—— 进一步演示「带 `cssFile` 的 CSS 皮肤包」怎么写
 
 **安全设计**（这段是真做了的，不是话术）：
 
@@ -72,6 +83,15 @@
 - 面板是 Shadow DOM 实现的，样式完全隔离，不会被任何网站 CSS 污染。
 
 ---
+
+## 🤝 投稿（自动化到什么程度）
+
+社区投稿不需要懂 git：提 Issue 填表，或者提 PR。**格式类问题全部机检**——字段、路径、禁词、体积、sha256 指纹、CSS 红线，本地 `node tools/check.mjs` 和 GitHub CI 跑的是同一套。人只负责看「这段代码想干什么、权限要得合不合理」。
+
+```bash
+node tools/new-plugin.mjs 我的插件 my-plugin   # 生成模板
+node tools/check.mjs --fix                    # 检查并自动补 sha256
+```
 
 ## 📦 安装
 
@@ -129,6 +149,14 @@ v2.1.0 改了目录结构（新增 `sandbox.html` / `sandbox.js` / `workshop/`�
 
 ## 📝 更新日志
 
+### v2.2.1
+
+- 🛡 **首次使用免责协议**：第一次进「创意工坊」或第一次装插件，必须先读一页风险说明并勾选同意。
+- 🏷 **措辞修正**：「官方」→「内置」，「未审核」→「未经审核」，避免被误认为点猫官方出品。
+- ⚡ 修掉插件被误判「卡死」的问题：不再用「启动 N 秒」判超时（等慢接口是合法的），只认心跳。
+- 🧹 插件被停用时，它在页面上留下的卡片会一起清掉（之前会留一张僵尸 loading）。
+- 🧩 **创作栏快捷入口扩充**：除 Kitten4 外，新增 **Kitten3**（和搭积木一样有趣的编程）、**BoxPlay**（把想象变成作品）、**VOXA**（岛3模型在线编辑器）。倒反天罡的网格模式和原生模式都会显示，关掉开关即消失。
+
 ### v2.2.0
 
 - 🌐 **创意工坊开放社区投稿**：工坊现在会从仓库拉取 `workshop/community.json`，社区主题 / 插件装完后自动出现在列表里，最长 24 小时更新一次；右上角新增「🌐 同步」按钮，想立刻刷新就点它。
@@ -137,7 +165,16 @@ v2.1.0 改了目录结构（新增 `sandbox.html` / `sandbox.js` / `workshop/`�
 - 🔒 **社区插件必须带 `sha256`**：指纹对不上就拒绝运行，防止文件被篡改。
 - 🧹 **校验层**：主题 CSS 禁止 `@import` 和外部 `url()`、插件禁止 `eval` / `new Function` / `import` / `document` / 混淆代码、体积上限 200KB、hosts 白名单格式校验。
 - 📄 **新增开发者文档**：[DEVELOPER.md](DEVELOPER.md) + `tools/validate.mjs` 本地校验器 + Issue 投稿表单（不会 git 也能投稿）。
-- 🎨 内置两个示例社区主题：薄荷海、纸墨。
+│   ├── new-plugin.mjs               # 插件/主题模板生成器
+│   └── check.mjs                    # 一条命令跑完全部检查
+- 🎨 社区清单里放了两个内置示例：暗夜霓虹（只有 `apply`，最简形态）、薄荷海（带 `cssFile` 的皮肤包）；照着抄就能写自己的。
+- 🏷 **卡片显示作者**：每条都标 `by 作者名`，万圣夜惊魂的作者 Helen.S 不再隐身；已下架的条目会留一张「已下架」卡片，随时能卸载。
+- 🔐 **插件可接管设置项（`claims`）**：主题/插件能声明「这几项我要用我的值」，装好后设置面板里对应项置灰并显示「🔒 由「X」接管」，点一下就能释放；**你原来的设置从不被覆盖**，卸载后自动回来。
+- 🌙 **明暗模式提示**：条目可以标注更适合深色还是浅色；不搭时卡片上会提醒，切换模式时最多提示一次，不挡着用。
+- 📜 设置面板的滚动条也换成了细圆角样式，跟随明暗自动变色。
+- 🛡 **远程代码的三道闸（本轮重点）**：① 沙盒页面被 CSP **物理断网**（`connect-src 'none'`，也造不出子 iframe 绕路），插件进程里没有任何可用的网络函数；② 联网只能走 `PickcatPlus.fetch()` → 宿主二次校验 hosts 白名单 → `background.js` 代发（只允许 https、不带 Cookie、30 秒超时、响应上限 512KB）；③ 每个已装插件记代码指纹，作者更新代码后插件自动挂起，必须点「🔐 代码已更新 · 重新确认」才继续跑。
+- 🚦 单插件消息配额 60 条/秒，超了宿主直接限流，防止恶意插件刷爆页面。
+- ⚡ **插件跑在独立 Worker 里**：`while(true){}` 这类死循环只会卡死它自己。看门狗发现「启动 8 秒没反应」或「一次调用 20 秒没回应」就直接 `terminate()`，插件自动停用并在卡片上留一颗「⚡ 已停用 · 重试」按钮，页面照常能用。
 
 ### v2.1.2
 
@@ -159,7 +196,7 @@ v2.1.0 改了目录结构（新增 `sandbox.html` / `sandbox.js` / `workshop/`�
 ### v2.1.0
 
 - 🎉 新增**创意工坊**：可以装主题、装插件（沙盒隔离运行）。
-- 🎉 新增两个内置主题：樱花春日、暗夜霓虹。
+- 🎉 新增两个内置主题：樱花春日、暗夜霓虹（v2.2.0 里樱花春日已下线，暗夜霓虹转为社区清单里的内置示例）。
 - ✨ 新增示例插件「AI 总结」（自带 API Key，直连你选的模型服务商）。
 - 🔧 合并「自动加喵」（原独立插件 pickcat-miao）。
 - 🔧 修复深色模式下遮罩颜色判断错误的问题。
@@ -170,27 +207,33 @@ v2.1.0 改了目录结构（新增 `sandbox.html` / `sandbox.js` / `workshop/`�
 
 ```text
 PICKCAT-Plus/
-├── manifest.json                     # 扩展配置（MV3，仅 storage 权限）
+├── manifest.json                     # 扩展配置（MV3）
 ├── content.js                        # 核心：设置面板 / 背景 / 指针 / 布局 / 加喵 / 工坊 UI
-├── sandbox.html                      # 插件沙盒页（隔离环境）
-├── sandbox.js                        # 沙盒运行时：RPC、API 注入、网络闸门
+├── background.js                     # 唯一网络出口（插件联网只能走这里）
+├── sandbox.html                      # 插件沙盒页（隔离环境，CSP 物理断网）
+├── sandbox.js                        # 沙盒中继：RPC、API 注入、Worker 看门狗
 ├── cursors/                          # 内置鼠标指针
 │   ├── style1.png  style2.png
 │   └── style3.png  style6.png
 ├── icons/                            # 扩展图标
 ├── workshop/                         # 创意工坊
-│   ├── builtin.json                  # 内置清单（官方自带）
+│   ├── builtin.json                  # 内置清单（随扩展打包）
 │   ├── community.json                # 社区清单（投稿改这里）
 │   └── packs/
 │       ├── ai-summary.js             # AI 总结插件
+│       ├── security-lab.js           # 安全实验室（13 项越权自测）
 │       ├── theme-halloween.css       # 万圣夜惊魂皮肤
-│       ├── theme-mint.css            # 薄荷海（社区示例）
-│       └── theme-paper.css           # 纸墨（社区示例）
-├── tools/validate.mjs                # 投稿本地校验器
+│       └── theme-mint.css            # 薄荷海（社区示例）
+├── tools/
+│   ├── validate.mjs                  # 投稿校验器（和扩展内同一套规则）
+│   ├── new-plugin.mjs                # 插件/主题模板生成器
+│   └── check.mjs                     # 一条命令跑完全部检查
+├── .github/workflows/workshop-check.yml  # CI：PR 自动跑校验
 └── DEVELOPER.md                      # 开发者投稿指南
 ```
 
-想投稿？看 [DEVELOPER.md](DEVELOPER.md)：写完 `node tools/validate.mjs` 全绿，提个 Issue 就行，不用懂 git。
+想投稿？看 [DEVELOPER.md](DEVELOPER.md)：`node tools/new-plugin.mjs` 生成模板 → `node tools/check.mjs --fix` 全绿 → 提 Issue 或 PR。**
+
 
 没有构建步骤、没有 npm、没有依赖——`content.js` 一个文件就是全部逻辑，改完直接刷新扩展就能跑。
 

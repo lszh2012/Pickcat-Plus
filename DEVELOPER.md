@@ -12,7 +12,7 @@
 2. 在 `workshop/community.json` 里加一条 JSON。
 3. 本地跑 `node tools/validate.mjs`，全绿。
 4. 提 Issue（推荐，网页填空）或 PR。
-5. 合并后最长 24 小时，所有用户的工坊里就会出现你的作品。
+5. 合并后最长 10 分钟，所有用户的工坊里就会自动同步到你的作品（也可以让用户点「🌐 同步」立刻拉）。
 
 ---
 
@@ -20,7 +20,7 @@
 
 ```
 workshop/
-  builtin.json        # 官方内置清单，只有维护者能动
+  builtin.json        # 内置清单（随扩展打包），只有维护者能动
   community.json      # 社区清单 ← 你改这里
   packs/
     theme-mint.css    # 你的主题样式
@@ -70,6 +70,8 @@ workshop/
 | `cssFile` | ✅ | 仓库内相对路径，必须以 `.css` 结尾 |
 | `htmlClass` | 建议 | 注入时加到 `<html>` 上的类名，只能字母数字 `_-` |
 | `apply` | ✅ | 要写入的设置项，见下表 |
+| `mode` | 建议 | `"dark"` / `"light"` / `"any"`（默认）。声明这套皮肤更适合哪种配色；和用户当前模式不搭时，卡片上会挂一个提醒，用户切换模式时最多提示一次。**不阻止安装**。 |
+| `claims` | 可选 | 你要「接管」的设置项，见 2.5 |
 
 ### 2.2 `apply` 允许的键
 
@@ -81,8 +83,37 @@ workshop/
 | `pickcatCursor` | `default` / `style1` / `style2` / `style3` / `style6` / `custom` | 指针样式 |
 | `pickcatCustomCursor` | `data:image/png;base64,...` | 仅当 `custom` 时有效，**必须 32×32**，条目别超过 8KB |
 
-### 2.3 CSS 规则（会被自动审计，不合格直接拒）
+### 2.3 接管设置项（`claims`，可选）
 
+有些主题必须锁死某几个设置才成立：暗色主题要关掉背景遮罩、配套指针不能换。用 `claims` 声明它们。
+
+```json
+"claims": [
+  {
+    "key": "pickcatMaskEnabled",
+    "value": false,
+    "label": "背景遮罩",
+    "reason": "夜色背景再叠一层灰纱会发闷，也会糊掉月亮。"
+  }
+]
+```
+
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| `key` | ✅ | 只能是：`pickcatBgUrl` / `pickcatBgBase64` / `pickcatMaskEnabled` / `pickcatCursor` / `pickcatCustomCursor` / `pickcatHideCat` / `pickcatKitten4` / `pickcatCategoryList` / `pickcatCreationGrid` |
+| `value` | ✅ | 你要强制使用的值，类型必须和该设置一致（布尔 / 指针枚举 / 字符串） |
+| `label` | ✅ | 给人看的名字（≤60 字），会显示在安装弹窗和设置面板的锁标签上 |
+| `reason` | 建议 | 为什么必须锁（≤80 字），显示在安装弹窗里 |
+
+规则：
+
+- **用户原来的值不会被覆盖**。扩展只存一份「租约」，读取配置时在内存里临时套用你的值；卸载/禁用/点「释放」立刻恢复用户自己的设置。
+- 单条最多 **5 项**；同一个键最多被 **3 个**插件同时接管（后装的优先）。
+- 用户随时可以在设置面板里看到「🔒 由「X」接管 · 点此释放」，所以 `label` 和 `reason` 要写清楚，别写「设置」这种废话。
+- 开了「安全模式」时所有租约一次性释放。
+- 滥用（把 9 项全锁上）会被打回改。
+
+### 2.4 CSS 规则（会被自动审计，不合格直接拒）
 - ❌ 不能 `@import`、不能 `url()` 引外部资源（只允许 `data:`）。
   想让主题带图？请转成 base64 内联，或干脆用 CSS 渐变 / 内联 SVG data URI。
 - ❌ 不能出现 `expression(`、`behavior:`、`javascript:`。
@@ -96,8 +127,7 @@ html.pickcat-theme-mint article {
 }
 ```
 
-### 2.4 主题能做 / 不能做
-
+### 2.5 主题能做 / 不能做
 | 能做 | 做不到 |
 | --- | --- |
 | 配色、渐变背景、圆角、边框、阴影、字体、滚动条、选中色 | 新增 DOM（比如左侧图标栏、横幅、悬浮预览卡） |
@@ -140,7 +170,45 @@ html.pickcat-theme-mint article {
 | `permissions` | ✅ | 见 3.2，取最小集合 |
 | `hosts` | 有 `network` 时必填 | 允许访问的域名白名单 |
 | `sha256` | ✅ | 文件的 SHA-256。内容一改就要同步更新 |
-| `settings` | 选填 | 安装后展示给用户的设置表单，最多 12 项，`type` 支持 `text` / `password` / `select` / `number` / `switch` |
+| `settings` | 选填 | 安装后展示给用户的设置表单，最多 12 项（见 3.1.1） |
+| `mode` | 选填 | `"dark"` / `"light"` / `"any"`，声明插件对配色的偏好，只做提示 |
+| `claims` | 选填 | 和主题一样，可以接管设置项（见 2.3）。插件一般不需要，插件自己的设置请用 `settings` |
+
+#### 3.1.1 `settings` 怎么写
+
+用户装上插件后，卡片上会出现一个「⚙」，点开就是你声明的表单。改完自动保存，同时会推给运行中的插件（不用重装）。
+
+```json
+"settings": [
+  { "key": "apiKey", "label": "API Key", "type": "password",
+    "placeholder": "sk-...", "hint": "只存在本机，不会上传。" },
+  { "key": "model", "label": "模型", "type": "select",
+    "default": "deepseek-chat", "options": ["deepseek-chat", "moonshot-v1-8k"] },
+  { "key": "maxLen", "label": "最长字数", "type": "number",
+    "default": 200, "min": 50, "max": 2000 },
+  { "key": "emoji", "label": "显示表情", "type": "switch", "default": true }
+]
+```
+
+| 字段 | 说明 |
+| --- | --- |
+| `key` | ✅ 字母/数字/下划线，插件里靠它取值 |
+| `label` | 显示名，不写就用 `key` |
+| `type` | `text`（默认）/ `password`（打点）/ `select`（必须有 `options`）/ `number`（可配 `min`/`max`）/ `switch`（布尔开关） |
+| `default` | 默认值。`switch` 用 `true/false`，`number` 用数字，`select` 必须是 options 里的一个 |
+| `options` | 仅 `select`：字符串数组，或 `[{"value":"deepseek-chat","label":"DeepSeek 对话"}]` |
+| `placeholder` / `hint` | 输入框占位符 / 下方灰色小字说明 |
+
+**插件里怎么读**（只在 `storage` 权限下可用）：
+
+```js
+const cfg = Object.assign(
+  { apiKey: '', model: 'deepseek-chat' },          // 兜底默认值，用户没填也能跑
+  (await PickcatPlus.storage.get('settings')) || {}
+);
+```
+
+> 约定：所有表单值统一存在 `settings` 这个键下（**不是**每个字段一个键），这样一次 `storage.get('settings')` 就能全拿到。`ai-summary` 就是这么写的，可以抄。
 
 ### 3.2 权限
 
@@ -196,16 +264,26 @@ node tools/validate.mjs      # 清单里 sha256 填错时，它会直接把正�
 
 ---
 
-## 4. 本地自检
+## 4. 本地自检（三条命令，全自动）
 
 ```bash
-node tools/validate.mjs
+# ① 生成模板（可选，省得手抄字段）
+node tools/new-plugin.mjs 我的插件 my-plugin
+node tools/new-plugin.mjs 我的主题 theme-xxx --theme
+
+# ② 一条命令跑完所有检查（等同 CI 做的事）
+node tools/check.mjs
+
+# ③ 如果只是 sha256 忘了填 / 改了代码没同步，让它自己写回去
+node tools/check.mjs --fix
 ```
 
-它做的是**和扩展内完全一样的检查**：字段合法性、id 唯一、路径存在、CSS 红线、插件禁词、sha256 比对、体积上限。
+`validate.mjs` 做的是**和扩展内完全一样的检查**：字段合法性、id 唯一、路径存在、CSS 红线、插件禁词、sha256 比对、体积上限。
 全绿再提交，能省掉一轮来回。
 
 > 合并后扩展里还会再查一次（扩展才是最终防线），所以本地过了不代表审核一定过，但基本不会因为格式被打回。
+
+**CI 会自动跑同一套检查**：提了 PR 之后，GitHub 的「创意工坊检查」会立刻跑一遍 —— 绿勾 = 格式没问题，红叉 = 点 Details 看是哪条。另有一条扩展体积上限（2MB），超了也是红叉。
 
 ---
 
@@ -233,18 +311,24 @@ node tools/validate.mjs
 
 ## 6. 审核与更新
 
-- 社区条目会显示作者署名和「🌐 社区 · 未审核」标记，用户安装前会看到权限清单。
-- 官方只会给自己的条目打「✅ 官方认证」，社区条目永远是「未审核」——这是设计，不是歧视。
-- **更新**：改文件 + 升 `version` + 若是插件同步更新 `sha256`，重新提交一次即可。用户那边最长 24 小时收到。
-- 审核分级：直接拒（混淆 / 远程加载代码 / 读 Cookie / 白名单外联网 / 伪装官方）、打回改（权限过大、hosts 通配、超体积）、合并标「已审核」。
+- 社区条目会显示作者署名和「🌐 社区 · 未经审核」标记，用户安装前会看到权限清单。
+- 维护者只会给随扩展打包的条目打「✅ 内置」，社区条目永远是「未经审核」——这是设计，不是歧视。
+- **更新**：改文件 + 升 `version` + 若是插件同步更新 `sha256`，重新提交一次即可。用户那边最长 10 分钟就会自动同步到（也可让用户点「🌐 同步」立刻拉）。
+- 审核分级：直接拒（混淆 / 远程加载代码 / 读 Cookie / 白名单外联网 / 伪装成内置条目）、打回改（权限过大、hosts 通配、超体积）、合并标「已审核」。
+- **自动化到哪一步**：格式、路径、禁词、体积、sha256、CSS 红线全部由 `tools/validate.mjs` 和 CI 机检；**人只做机检做不了的事** —— 看这段代码到底想干什么、权限要得合不合理。机检过不了的 PR 不用人看，红叉自己会挡住。
 
 ---
 
 ## 7. 安全边界（请知悉）
 
-- 插件跑在 `sandbox.html`（无 `chrome.*`、`origin: null`），原生 `fetch`/`XMLHttpRequest`/`WebSocket`/`EventSource` 会在启动时被替换成抛错桩，联网只能走 `PickcatPlus.fetch()`。
-- 这层白名单是**合作式**的：它挡住误用和明显的越权，但沙盒里终究是在跑第三方代码。所以：**只装你信任的来源**，看到要求 `network` + 宽泛 hosts 的插件，多想三秒。
-- 主题是纯 CSS，不执行代码，风险显著低于插件。
+- 插件跑在 `sandbox.html`（无 `chrome.*`、`origin: null`）。
+- **沙盒被 CSP 物理断网**：`connect-src 'none'; child-src 'none'; object-src 'none'`。也就是说插件进程里**根本没有可用的网络函数**，也造不出子 iframe 去另开一条路 —— 这是浏览器强制的，不是我们"帮忙删了一下"。
+- 联网唯一出口是 `PickcatPlus.fetch()`：沙盒 → 宿主（`content.js`，再判一遍 hosts 白名单）→ `background.js`（background service worker 真正发请求）。出口硬规则：只允许 https、只允许 GET/POST/PUT/PATCH/DELETE、**一律不带 Cookie**、30 秒超时、响应上限 512KB。
+- 你要联网，就必须在清单里写 `hosts` 白名单，而且要 `network` 权限；两者缺一个都直接拒装。
+- 单插件消息配额 60 条/秒，超了宿主就限流。
+- **代码变了要重新确认**：我们记录每个已装插件的代码 `sha256`。作者更新代码后，客户端会发现指纹变化，把插件挂起并弹「代码已更新 · 重新确认」，用户点了才继续跑 —— 不存在"偷偷升级权限"。
+- 主题是纯数据 + 纯 CSS，不执行代码，风险显著低于插件。
+- **你的代码跑在独立 Worker 里**，沙盒页只做中继与看门狗。所以：`while(true){}`、`for(;;)` 这类死循环**不会**拖死用户的页面，只会让「你这个插件」被强制终止并自动停用。判定用的是**心跳**：正常等待网络时心跳照发，只有同步死循环会让心跳断掉，12 秒没心跳就掐。代价是：Worker 里没有 `document`、`window`、`Image`、`iframe`、`localStorage`，只有 `PickcatPlus` 那一套异步 API —— 别去碰 DOM，本来也不该碰。
 
 ---
 

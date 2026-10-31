@@ -260,39 +260,79 @@ function applyHideCat(hide) {
 // ==========================================
 // 模块 2：社区优化
 // ==========================================
-function injectKitten4() {
-    const existing = document.getElementById('pickcat-custom-kitten4');
-    if (!config.kitten4) {
-        // 关掉时要立刻消失，别等刷新
-        if (existing) existing.remove();
-        return;
-    }
-    if (existing) return;
+// ---- 创作栏快捷入口（Kitten3 / Kitten4 / BoxPlay / VOXA）----
+// 做法统一：克隆站点现有的 KittenN 卡片，只换标题 / 图标 / 链接 / 简介，
+// 原节点一根手指都不动，关掉开关就把克隆删掉，页面当场回到原样。
+const KITTEN3_DESC = '和搭积木一样有趣的编程';
+const CREATION_SHORTCUTS = [
+    { id: 'pickcat-custom-kitten4', title: 'Kitten4', url: 'https://kitten4.codemao.cn/', icon: 'icons/kitten4.png', desc: '体验全新升级的源码编辑器' },
+    { id: 'pickcat-custom-kitten3', title: 'Kitten3', url: 'https://kitten.codemao.cn/', icon: 'icons/kitten3.png', desc: KITTEN3_DESC },
+    { id: 'pickcat-custom-boxplay', title: 'BoxPlay', url: 'https://boxplay.dao3.fun/', icon: 'icons/boxplay.png', desc: '把想象变成作品' },
+    { id: 'pickcat-custom-voxa', title: 'VOXA', url: 'https://staging-local.dao3.fun/voxa/', icon: 'icons/dao3.png', desc: '岛3模型在线编辑器' }
+];
+const SHORTCUT_BY_TITLE = {};
+CREATION_SHORTCUTS.forEach(sc => { SHORTCUT_BY_TITLE[sc.title] = sc; });
+
+function injectCreationShortcuts() {
+    // 开关关着：把已经插进去的克隆全撤掉（不等刷新）
+    if (!config.kitten4) { removeCreationShortcuts(); return; }
+
+    // 找站点原生的 KittenN 卡片当模板；找不到就下一轮再说
+    let template = null;
     document.querySelectorAll('a').forEach(link => {
-        if (link.id !== 'pickcat-custom-kitten4' && link.textContent.includes('KittenN')) {
-            const p = link.parentNode;
-            if (!p || !p.isConnected) return;
-            const clone = link.cloneNode(true);
-            clone.id = 'pickcat-custom-kitten4';
-            clone.href = 'https://kitten4.codemao.cn/';
-            clone.target = '_blank';
-            const img = clone.querySelector('img');
-            if (img) { img.src = safeGetURL('icons/kitten4.png'); img.style.objectFit = 'contain'; }
-            const walker = document.createTreeWalker(clone, NodeFilter.SHOW_TEXT);
+        if (template) return;
+        if (CREATION_SHORTCUTS.some(sc => sc.id === link.id)) return;
+        if (link.textContent.includes('KittenN')) template = link;
+    });
+    if (!template) return;
+
+    const parent = template.parentNode;
+    if (!parent || !parent.isConnected) return;
+
+    // 按顺序接在 KittenN 后面：Kitten4 → Kitten3 → BoxPlay → VOXA
+    let anchor = template;
+    CREATION_SHORTCUTS.forEach(sc => {
+        let node = document.getElementById(sc.id);
+        if (!node) {
+            node = template.cloneNode(true);
+            node.id = sc.id;
+            node.href = sc.url;
+            node.target = '_blank';
+            const img = node.querySelector('img');
+            if (img) { img.src = safeGetURL(sc.icon); img.style.objectFit = 'contain'; }
+            const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
             let textNode;
             while ((textNode = walker.nextNode())) {
-                if (textNode.nodeValue.includes('KittenN')) { textNode.nodeValue = textNode.nodeValue.replace('KittenN', 'Kitten4'); break; }
+                if (textNode.nodeValue.includes('KittenN')) {
+                    textNode.nodeValue = textNode.nodeValue.replace('KittenN', sc.title);
+                    break;
+                }
             }
-            p.insertBefore(clone, link.nextSibling);
+            // 副标题那行小字换成自己的简介（原生文案是 KittenN 的「三端合一…」）
+            node.querySelectorAll('span, div, p').forEach(el => {
+                if (el.children.length === 0 && el.textContent.trim().startsWith('三端合一')) {
+                    el.textContent = sc.desc;
+                }
+            });
+            if (anchor.parentNode !== parent || !anchor.isConnected) anchor = template;
+            parent.insertBefore(node, anchor.nextSibling);
         }
+        anchor = node;
     });
 }
 
-// 移除 Kitten4 克隆节点（开关从开到关时用）
-function removeKitten4() {
-    const node = document.getElementById('pickcat-custom-kitten4');
-    if (node) node.remove();
+function removeCreationShortcuts() {
+    CREATION_SHORTCUTS.forEach(sc => {
+        const node = document.getElementById(sc.id);
+        if (node) node.remove();
+    });
 }
+
+// 兼容旧调用名（别的地方还在用）
+function injectKitten4() { injectCreationShortcuts(); }
+function injectKitten3() { /* 已并入 injectCreationShortcuts */ }
+function removeKitten4() { removeCreationShortcuts(); }
+function removeKitten3() { /* 已并入 removeCreationShortcuts */ }
 
 function processLinks() {
     const currentHost = window.location.hostname;
@@ -353,16 +393,19 @@ function transformCreationCards() {
 
     listContainer.classList.add('pickcat-grid-layout');
 
+    const sawShortcut = {};
     items.forEach(item => {
         const href = item.getAttribute('href');
         const titleText = item.querySelector('span.flex-1')?.textContent.trim() || item.textContent.trim();
         const imgSrc = item.querySelector('img')?.getAttribute('src');
+        const sc = SHORTCUT_BY_TITLE[titleText];
+        if (sc) sawShortcut[titleText] = true;
 
         let descText = '';
-        if (titleText.includes('Python') || titleText.includes('Py') || titleText.includes('海龟')) {
+        if (sc) {
+            descText = sc.desc;
+        } else if (titleText.includes('Python') || titleText.includes('Py') || titleText.includes('海龟')) {
             descText = '学习python，如此简单';
-        } else if (titleText.includes('Kitten4') || titleText.includes('K4')) {
-            descText = '体验全新升级的源码编辑器';
         } else if (titleText.includes('KittenN') || titleText.includes('KN')) {
             descText = '三端合一的新一代编辑器';
         } else if (titleText.includes('CoCo')) {
@@ -387,6 +430,7 @@ function transformCreationCards() {
         if (imgSrc) {
             let finalImgSrc = imgSrc;
             if (titleText === 'Kitten4') finalImgSrc = safeGetURL('icons/kitten4.png');
+            if (titleText === 'Kitten3') finalImgSrc = safeGetURL('icons/kitten3.png');
 
             innerHtml += `
                 <span class="inline-flex shrink-0 items-center justify-center rounded-md bg-info/10 text-info mt-auto size-9 self-end">
@@ -408,6 +452,35 @@ function transformCreationCards() {
         parent.insertBefore(clone, item.nextSibling);
         item.setAttribute(HIDDEN_FLAG, 'creation');
     });
+
+    // 兜底：某个快捷入口没被收成卡（例如克隆节点晚于本次渲染才出现），
+    // 就在网格里补一张同款卡，保证 K3/K4/BoxPlay/VOXA 一个都不缺。
+    if (config.kitten4) {
+        CREATION_SHORTCUTS.forEach((item) => {
+            if (sawShortcut[item.title]) return;
+            if (listContainer.querySelector('#' + item.id)) return;
+            const card = document.createElement('a');
+            card.setAttribute(CLONE_FLAG, 'creation');
+            card.setAttribute('data-pickcat-shortcut', item.title);
+            card.className = "overflow-visible flex aspect-square w-full min-w-0 flex-col rounded-lg p-3.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50 bg-(--ui-card-translucent) text-default hover:bg-(--ui-card-interactive)";
+            card.setAttribute('href', item.url);
+            card.setAttribute('target', '_blank');
+            card.setAttribute('aria-label', item.title);
+            card.innerHTML = `
+            <div data-slot="body" class="p-4 sm:p-6 min-w-0 contents">
+                <span class="text-[15px] leading-[1.4] font-bold desktop:text-base">${item.title}</span>
+                <span class="mt-1 text-[11px] leading-4 text-muted">${item.desc}</span>
+                <span class="inline-flex shrink-0 items-center justify-center rounded-md bg-info/10 text-info mt-auto size-9 self-end">
+                    <img src="${safeGetURL(item.icon)}" alt="" class="size-6 object-contain">
+                </span>
+            </div>`;
+
+            const anchor = listContainer.querySelector('[aria-label="Kitten4"]') ||
+                           listContainer.querySelector('[aria-label="KittenN"]');
+            if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(card, anchor.nextSibling);
+            else listContainer.appendChild(card);
+        });
+    }
 }
 
 function transformCategoriesToList() {
@@ -676,6 +749,89 @@ function initSuffixModule() {
 // 模块 5：沉浸式内嵌设置面板 (Shadow DOM)
 // ==========================================
 let shadowRootInstance = null; 
+let panelRefreshHook = null;   // 设置面板的刷新函数（工坊安装/卸载插件后要重绘锁定状态）
+
+// ==========================================
+// 模块 5.5：插件设置租约（claims）
+// ------------------------------------------------------------
+// 设计原则：**永不改写用户自己的 storage 值**。
+// 插件要接管某几项设置时，只往 pickcat_ws_claims 里登记一条租约，
+// 读取配置时在内存里按「后装的优先」覆盖。卸载 = 撕掉租约，用户原值天然还在。
+// 这样即使浏览器崩溃、扩展被重装，用户的设置也不会丢。
+// ==========================================
+const CLAIMS_KEY = 'pickcat_ws_claims';
+const CLAIM_MAX = 5;          // 单个插件最多接管几项
+const CLAIM_MAX_PER_KEY = 3;  // 同一个设置项最多被几个插件争抢
+// 允许被接管的键 + 值类型（类型不对直接拒绝，防止往 storage 里塞奇怪的东西）
+const CLAIM_KEY_TYPES = {
+    pickcatBgUrl: 'text',
+    pickcatBgBase64: 'text',
+    pickcatMaskEnabled: 'bool',
+    pickcatCursor: 'cursor',
+    pickcatCustomCursor: 'text',
+    pickcatHideCat: 'bool',
+    pickcatKitten4: 'bool',
+    pickcatCategoryList: 'bool',
+    pickcatCreationGrid: 'bool'
+};
+const CURSOR_ENUM = ['default', 'style1', 'style2', 'style3', 'style6', 'custom'];
+
+// 官方放在社区清单里的示例条目：这几个 id 允许保留「官方」标识（写死在这里，社区无法冒充）
+const TRUSTED_COMMUNITY_IDS = ['theme-neon'];
+
+// 当前主题皮肤声称适配的配色（用于「用户切到不匹配的模式时提示一次」）
+let activeThemeMode = 'any';
+let activeThemeName = '';
+let themeModeWarned = false;
+
+function checkThemeModeHint() {
+    if (activeThemeMode === 'any' || themeModeWarned) return;
+    const cur = isDarkMode() ? 'dark' : 'light';
+    if (cur === activeThemeMode) return;
+    themeModeWarned = true;
+    try {
+        Workshop.toast((activeThemeMode === 'dark' ? '🌙' : '☀️') + '「' + activeThemeName + '」在' +
+            (activeThemeMode === 'dark' ? '深色' : '浅色') + '模式下效果更好', 4200);
+    } catch (e) { /* 工坊还没挂载，忽略 */ }
+    setTimeout(() => { themeModeWarned = false; }, 30000);   // 30 秒内不重复打扰
+}
+
+// 校验一条 claim 的值是否符合类型；不合规返回 undefined
+function claimValueOk(key, value) {
+    const t = CLAIM_KEY_TYPES[key];
+    if (!t) return undefined;
+    if (t === 'bool') return (value === true || value === false) ? value : undefined;
+    if (t === 'cursor') return (typeof value === 'string' && CURSOR_ENUM.indexOf(value) >= 0) ? value : undefined;
+    if (t === 'text') {
+        if (typeof value !== 'string' || value.length > 200000) return undefined;
+        return value;
+    }
+    return undefined;
+}
+
+// 从 storage 里的 claims 对象取某项的生效值（后装的优先）
+function claimedValue(claims, key, fallback) {
+    const arr = claims && claims[key];
+    if (!Array.isArray(arr) || !arr.length) return fallback;
+    const v = arr[arr.length - 1];
+    return (v && typeof v === 'object' && 'value' in v) ? v.value : fallback;
+}
+
+// 撕掉一条租约（删掉某个插件对某个键的接管），然后立刻重新应用配置
+function releaseClaim(key, id, done) {
+    chrome.storage.local.get([CLAIMS_KEY], (res) => {
+        const claims = (res[CLAIMS_KEY] && typeof res[CLAIMS_KEY] === 'object') ? res[CLAIMS_KEY] : {};
+        if (Array.isArray(claims[key])) {
+            claims[key] = claims[key].filter((x) => !(x && x.id === id));
+            if (!claims[key].length) delete claims[key];
+        }
+        chrome.storage.local.set({ [CLAIMS_KEY]: claims }, () => {
+            loadAllConfigs();
+            if (panelRefreshHook) { try { panelRefreshHook(); } catch (e) { /* ignore */ } }
+            if (done) done();
+        });
+    });
+}
 
 function createSettingsPanel() {
     if (document.getElementById('pickcat-settings-host')) return;
@@ -698,6 +854,8 @@ function createSettingsPanel() {
                 --border: #eee;
                 --switch-bg: #ccc;
                 --panel-width: 520px;
+                --scroll-thumb: rgba(0, 0, 0, 0.16);
+                --scroll-thumb-hover: rgba(0, 0, 0, 0.32);
                 font-family: system-ui, -apple-system, sans-serif;
             }
             :host(.pickcat-dark) {
@@ -707,6 +865,8 @@ function createSettingsPanel() {
                 --text-muted: #9ca3af;
                 --border: rgba(255,255,255,0.1);
                 --switch-bg: #4b5563;
+                --scroll-thumb: rgba(255, 255, 255, 0.14);
+                --scroll-thumb-hover: rgba(255, 255, 255, 0.30);
             }
 
             * { box-sizing: border-box; }
@@ -800,6 +960,52 @@ function createSettingsPanel() {
             .content-area { flex: 1; padding: 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 24px; }
             .tab-content { display: none; flex-direction: column; gap: 12px; }
             .tab-content.active { display: flex; }
+
+            /* ★ 面板滚动条：细、圆角、不抢视线，hover 时才变亮（替代系统原生滚动条）
+               注意：Chrome 里一旦写了 scrollbar-width / scrollbar-color（标准属性），
+               ::-webkit-scrollbar 的定制就会被忽略，所以这里只能用 webkit 伪元素。 */
+            .content-area, .ws-modal-card {
+                scrollbar-gutter: stable;
+                overscroll-behavior: contain;
+            }
+            .content-area::-webkit-scrollbar,
+            .ws-modal-card::-webkit-scrollbar { width: 10px; height: 10px; }
+            .content-area::-webkit-scrollbar-track,
+            .ws-modal-card::-webkit-scrollbar-track { background: transparent; }
+            .content-area::-webkit-scrollbar-thumb,
+            .ws-modal-card::-webkit-scrollbar-thumb {
+                background-color: var(--scroll-thumb);
+                border-radius: 999px;
+                border: 3px solid transparent;
+                background-clip: content-box;
+                transition: background-color 0.18s ease;
+            }
+            .content-area:hover::-webkit-scrollbar-thumb,
+            .ws-modal-card:hover::-webkit-scrollbar-thumb {
+                background-color: var(--scroll-thumb-hover);
+                background-clip: content-box;
+            }
+            .content-area::-webkit-scrollbar-thumb:active,
+            .ws-modal-card::-webkit-scrollbar-thumb:active {
+                background-color: var(--primary);
+                background-clip: content-box;
+            }
+            .content-area::-webkit-scrollbar-corner,
+            .ws-modal-card::-webkit-scrollbar-corner { background: transparent; }
+
+            /* ★ 被插件接管的设置项标签 */
+            .ws-lock-tag {
+                display: inline-flex; align-items: center; gap: 4px;
+                margin-top: 6px; padding: 3px 8px; border-radius: 999px;
+                font-size: 11px; line-height: 1.4; cursor: pointer; user-select: none;
+                color: #92400e; background: rgba(251, 191, 36, 0.18);
+                border: 1px solid rgba(251, 191, 36, 0.45); white-space: nowrap;
+            }
+            .ws-lock-tag:hover { background: rgba(251, 191, 36, 0.3); }
+            :host(.pickcat-dark) .ws-lock-tag {
+                color: #fcd34d; background: rgba(251, 191, 36, 0.14);
+                border-color: rgba(251, 191, 36, 0.35);
+            }
             .section-title { font-size: 14px; font-weight: bold; color: var(--text-main); margin-bottom: 4px; }
 
             .row-card {
@@ -874,9 +1080,14 @@ function createSettingsPanel() {
             .ws-badge.warn { background: rgba(245,158,11,0.15); color: #d97706; }
             .ws-preview { height: 32px; border-radius: 7px; border: 1px solid var(--border); }
             .ws-desc { font-size: 11.5px; line-height: 1.5; color: var(--text-muted); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+            .ws-author { font-size: 10.5px; color: var(--text-muted); opacity: .85; margin: -3px 0 7px 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
             .ws-tags { display: flex; gap: 4px; flex-wrap: wrap; }
             .ws-tag { font-size: 10px; padding: 1px 5px; border-radius: 4px; background: rgba(99,102,241,0.12); color: var(--primary); }
             .ws-tag.danger { background: rgba(239,68,68,0.12); color: #ef4444; }
+            .ws-tag.claim { background: rgba(245,158,11,0.16); color: #b45309; }
+            .ws-tag.warn { background: rgba(239,68,68,0.12); color: #ef4444; }
+            :host(.pickcat-dark) .ws-tag.claim { background: rgba(245,158,11,0.16); color: #fbbf24; }
+            :host(.pickcat-dark) .ws-tag.warn { background: rgba(239,68,68,0.18); color: #fca5a5; }
             .ws-actions { display: flex; gap: 6px; margin-top: 2px; }
             .ws-btn { flex: 1; padding: 6px 8px; font-size: 12px; border-radius: 7px; border: 1px solid var(--border); background: transparent; color: var(--text-main); cursor: pointer; transition: 0.2s; }
             .ws-btn:hover { border-color: var(--primary); color: var(--primary); }
@@ -888,6 +1099,9 @@ function createSettingsPanel() {
             .ws-settings.open { display: flex; }
             .ws-settings label { font-size: 11px; color: var(--text-muted); }
             .ws-settings input { padding: 6px 8px; font-size: 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-glass); color: var(--text-main); outline: none; }
+            .ws-settings select { padding: 6px 8px; font-size: 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-glass); color: var(--text-main); outline: none; cursor: pointer; }
+            .ws-settings .ws-switch-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-main); cursor: pointer; padding: 2px 0; }
+            .ws-settings .ws-switch-row input[type="checkbox"] { width: 15px; height: 15px; margin: 0; padding: 0; cursor: pointer; accent-color: var(--primary); }
             .ws-settings .ws-hint { font-size: 10.5px; color: var(--text-muted); line-height: 1.5; }
             .ws-modal { position: fixed; inset: 0; z-index: 2147483003; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.45); }
             .ws-modal.open { display: flex; }
@@ -896,8 +1110,13 @@ function createSettingsPanel() {
             .ws-modal-sub { font-size: 12px; color: var(--text-muted); margin: 0 0 12px; line-height: 1.6; }
             .ws-perm { display: flex; gap: 8px; font-size: 12px; padding: 7px 8px; border-radius: 8px; background: rgba(0,0,0,0.04); margin-bottom: 6px; color: var(--text-main); align-items: flex-start; }
             .ws-perm.high { background: rgba(239,68,68,0.1); }
+            .ws-perm.claim { background: rgba(245,158,11,0.14); }
             .ws-perm-txt { flex: 1; line-height: 1.5; }
             .ws-modal-foot { display: flex; gap: 8px; margin-top: 14px; }
+            .ws-consent-check { display: flex; gap: 9px; align-items: flex-start; margin-top: 14px; padding: 11px 12px; border-radius: 10px; background: var(--switch-bg); cursor: pointer; font-size: 12.5px; line-height: 1.55; color: var(--text-main); }
+            .ws-consent-check input { margin: 2px 0 0; width: 15px; height: 15px; flex-shrink: 0; cursor: pointer; accent-color: var(--primary); }
+            .ws-btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+            .ws-btn[disabled]:hover { background: var(--primary); }
         </style>
 
         <div id="hover-zone">
@@ -973,8 +1192,8 @@ function createSettingsPanel() {
                         </div>
                         <div class="row-card">
                             <div class="row-info">
-                                <div class="row-title">Kitten4 快捷入口</div>
-                                <div class="row-desc">在创作栏注入 K4 图标</div>
+                                <div class="row-title">创作快捷入口（K3 / K4 / BoxPlay / VOXA）</div>
+                                <div class="row-desc">在创作栏追加这几个入口，关掉即消失</div>
                             </div>
                             <label class="toggle-switch">
                                 <input type="checkbox" id="kitten4Toggle">
@@ -1083,7 +1302,7 @@ function createSettingsPanel() {
 
                     <div class="tab-content" id="tab-about">
                         <div class="row-card" style="flex-direction: column; align-items: flex-start; gap: 12px;">
-                            <h3 style="margin:0; color:var(--text-main);">PICKCAT Plus v2.2.0</h3>
+                            <h3 style="margin:0; color:var(--text-main);">PICKCAT Plus v2.2.1</h3>
                             <p style="margin:0; font-size:13px; color:var(--text-muted); line-height:1.6;">
                                 一个由社区开发者手搓的非官方 PICKCAT 增强插件。<br>
                                 旨在提供更顺手、更沉浸的社区体验。
@@ -1264,6 +1483,70 @@ function createSettingsPanel() {
     const randomToggle = shadow.getElementById('randomToggle');
     const resetAllBtn = shadow.getElementById('resetAllBtn');
 
+    // ★ 插件接管设置：置灰 + 「🔒 由 X 接管」标签，点标签当场释放
+    function lockTargets() {
+        return [
+            { key: 'pickcatBgUrl', els: [bgInput, saveBgBtn, uploadBgBtn] },
+            { key: 'pickcatBgBase64', els: [bgInput, saveBgBtn, uploadBgBtn], quiet: true },
+            { key: 'pickcatMaskEnabled', els: [maskToggle] },
+            { key: 'pickcatHideCat', els: [hideCatToggle] },
+            { key: 'pickcatKitten4', els: [kitten4Toggle] },
+            { key: 'pickcatCategoryList', els: [categoryListToggle] },
+            { key: 'pickcatCreationGrid', els: [creationGridToggle] },
+            { key: 'pickcatCursor', els: Array.prototype.slice.call(cursorItems) },
+            { key: 'pickcatCustomCursor', els: [customCursorFile], quiet: true }
+        ];
+    }
+
+    // 只还原「被接管置灰」的控件，别把 refreshPanelUI 自己加上的禁用状态一起放开
+    const claimDisabled = new Set();
+
+    function applyClaimLocks(claims) {
+        const defs = lockTargets();
+        defs.forEach((d) => {
+            d.els.forEach((el) => {
+                if (el && claimDisabled.has(el)) {
+                    el.disabled = false;
+                    el.removeAttribute('title');
+                    claimDisabled.delete(el);
+                }
+            });
+            const row = d.els[0] && d.els[0].closest ? d.els[0].closest('.row-card') : null;
+            if (row) { row.style.opacity = ''; row.classList.remove('locked-row'); }
+        });
+        shadow.querySelectorAll('.ws-lock-tag').forEach((n) => n.remove());
+
+        Object.keys(claims || {}).forEach((key) => {
+            const arr = claims[key];
+            if (!Array.isArray(arr) || !arr.length) return;
+            const rec = arr[arr.length - 1] || {};
+            const who = rec.name || rec.id || '插件';
+            defs.filter((d) => d.key === key).forEach((d) => {
+                d.els.forEach((el) => {
+                    if (!el) return;
+                    el.disabled = true;
+                    el.title = '该项正被「' + who + '」接管，卸载该插件后自动恢复';
+                    claimDisabled.add(el);
+                });
+                const row = d.els[0] && d.els[0].closest ? d.els[0].closest('.row-card') : null;
+                if (row) { row.style.opacity = '0.6'; row.classList.add('locked-row'); }
+                if (d.quiet) return;
+                const anchor = row || (d.els[0] && d.els[0].parentElement);
+                if (!anchor || anchor.querySelector('.ws-lock-tag')) return;
+                const tag = document.createElement('span');
+                tag.className = 'ws-lock-tag';
+                tag.textContent = '🔒 由「' + who + '」接管 · 点此释放';
+                tag.title = '点击立即释放该设置；插件可能显示异常，可在创意工坊重新安装';
+                tag.addEventListener('click', (ev) => {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    releaseClaim(key, rec.id);
+                });
+                anchor.appendChild(tag);
+            });
+        });
+    }
+
     function refreshPanelUI() {
         chrome.storage.local.get(null, (res) => {
             if (res.pickcatBgBase64) {
@@ -1341,8 +1624,11 @@ function createSettingsPanel() {
                 div.appendChild(delBtn);
                 suffixListEl.appendChild(div);
             });
+
+            applyClaimLocks(res[CLAIMS_KEY] || {});
         });
     }
+    panelRefreshHook = refreshPanelUI;
 
     function saveState(key, val, needsReload = false) {
         chrome.storage.local.set({ [key]: val }, () => {
@@ -1500,26 +1786,31 @@ function createSettingsPanel() {
 function loadAllConfigs(callback) {
     chrome.storage.local.get([
         'pickcatBgUrl', 'pickcatBgBase64', 'pickcatMaskEnabled', 'pickcatCursor', 'pickcatCustomCursor',
-        'pickcatHideCat', 'pickcatKitten4', 'pickcatCategoryList', 'pickcatCreationGrid'
+        'pickcatHideCat', 'pickcatKitten4', 'pickcatCategoryList', 'pickcatCreationGrid', CLAIMS_KEY
     ], (res) => {
-        config.hideCat = res.pickcatHideCat === true;
-        config.kitten4 = res.pickcatKitten4 === true;
-        config.categoryList = res.pickcatCategoryList === true;
-        config.creationGrid = res.pickcatCreationGrid === true;
+        // 插件租约覆盖：只在内存里生效，不碰用户存的原始值
+        const claims = (res[CLAIMS_KEY] && typeof res[CLAIMS_KEY] === 'object') ? res[CLAIMS_KEY] : {};
+        const pick = (key, fallback) => claimedValue(claims, key, fallback);
 
-        config.bgUrl = res.pickcatBgUrl || '';
-        config.bgBase64 = res.pickcatBgBase64 || '';
-        config.maskEnabled = res.pickcatMaskEnabled === true;
+        config.hideCat = pick('pickcatHideCat', res.pickcatHideCat === true) === true;
+        config.kitten4 = pick('pickcatKitten4', res.pickcatKitten4 === true) === true;
+        config.categoryList = pick('pickcatCategoryList', res.pickcatCategoryList === true) === true;
+        config.creationGrid = pick('pickcatCreationGrid', res.pickcatCreationGrid === true) === true;
+
+        config.bgUrl = pick('pickcatBgUrl', res.pickcatBgUrl || '');
+        config.bgBase64 = pick('pickcatBgBase64', res.pickcatBgBase64 || '');
+        config.maskEnabled = pick('pickcatMaskEnabled', res.pickcatMaskEnabled === true) === true;
 
         applyBackground(config.bgUrl, config.bgBase64, config.maskEnabled);
         
-        let cursorStyle = res.pickcatCursor || 'default'; 
+        let cursorStyle = pick('pickcatCursor', res.pickcatCursor || 'default'); 
         if (['style4', 'style5'].includes(cursorStyle)) cursorStyle = 'default';
-        injectCursorStyle(cursorStyle, res.pickcatCustomCursor || ''); 
+        injectCursorStyle(cursorStyle, pick('pickcatCustomCursor', res.pickcatCustomCursor || '')); 
 
         applyHideCat(config.hideCat);
-        if (!config.kitten4) removeKitten4();
+        if (!config.kitten4) { removeKitten4(); removeKitten3(); }
         injectKitten4();
+        injectKitten3();
         transformCreationCards();
         transformCategoriesToList();
         
@@ -1537,6 +1828,7 @@ function syncShadowTheme() {
     } else {
         host.classList.remove('pickcat-dark');
     }
+    checkThemeModeHint();
 }
 
 // ★ 核心修复：判空保护，确保 body 存在才监听
@@ -1569,6 +1861,7 @@ function startApp() {
         processLinks();
         setTimeout(() => {
             injectKitten4();
+            injectKitten3();
             transformCreationCards(); 
             transformCategoriesToList();
         }, 100); 
@@ -1608,6 +1901,9 @@ chrome.storage.onChanged.addListener((changes) => {
 // ==========================================
 const WS_STATE_KEY = 'pickcat_ws_state';
 const WS_DATA_PREFIX = 'pickcat_ws_data_';
+// 免责协议的版本号：内容有实质变化时 +1，所有用户会重新签一次
+const CONSENT_KEY = 'pickcat_ws_consent';
+const CONSENT_VERSION = 1;
 
 const WS_PERM_DEFS = {
     'dom-read': { level: 'low', icon: '👀', label: '读取页面文字', desc: '只读当前页面的可见文字（用来取帖子正文）' },
@@ -1702,7 +1998,7 @@ const Workshop = (function () {
     }
     const CATALOG_CACHE_KEY = 'pickcat_ws_catalog_cache';
     const CATALOG_TTL = 24 * 60 * 60 * 1000;
-    const CATALOG_SOFT_TTL = 6 * 60 * 60 * 1000;
+    const CATALOG_SOFT_TTL = 10 * 60 * 1000;
     const CATALOG_LOCAL_TTL = 30 * 60 * 1000;
     const APPLY_KEYS = ['pickcatBgUrl', 'pickcatBgBase64', 'pickcatMaskEnabled', 'pickcatCursor', 'pickcatCustomCursor'];
     const ID_RE = /^[a-z0-9][a-z0-9._-]{1,48}$/;
@@ -1710,9 +2006,28 @@ const Workshop = (function () {
     const HOST_RE = /^(\*\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i;
     let remoteMerged = 0;
     let remoteSyncedAt = 0;
+    let remoteUpdated = '';
 
     function str(v, max) {
         return String(v == null ? '' : v).slice(0, max);
+    }
+
+    // 解析插件要「接管」的设置项（claims）
+    function parseClaims(list) {
+        if (!Array.isArray(list)) return undefined;
+        const out = [];
+        const seen = {};
+        for (let i = 0; i < list.length && out.length < CLAIM_MAX; i++) {
+            const c = list[i];
+            if (!c || typeof c !== 'object') continue;
+            const key = str(c.key, 40);
+            if (!CLAIM_KEY_TYPES[key] || seen[key]) continue;
+            const v = claimValueOk(key, c.value);
+            if (v === undefined) continue;
+            seen[key] = 1;
+            out.push({ key: key, value: v, label: str(c.label, 60) || key, reason: str(c.reason, 80) });
+        }
+        return out.length ? out : undefined;
     }
 
     // 远程来的东西一律当不可信输入：字段白名单 + 长度上限 + 路径校验
@@ -1723,6 +2038,7 @@ const Workshop = (function () {
         const type = raw.type === 'theme' ? 'theme' : (raw.type === 'plugin' ? 'plugin' : '');
         if (!type) return null;
 
+        const trusted = TRUSTED_COMMUNITY_IDS.indexOf(id) >= 0;
         const item = {
             id: id,
             type: type,
@@ -1732,10 +2048,18 @@ const Workshop = (function () {
             author: str(raw.author, 40) || '匿名',
             version: str(raw.version, 20) || '1.0.0',
             desc: str(raw.desc, 240),
-            verified: 'unverified',        // 社区条目永远不能自称「官方 / 已审核」
+            // hidden：不在工坊列表里展示，只留给开发自测（已装的仍然会跑，
+            // 卸载后不会再出现在「已下架」区，因为它本来就没上架）
+            hidden: raw.hidden === true,
+            mode: (raw.mode === 'dark' || raw.mode === 'light') ? raw.mode : 'any',
+            // 社区条目永远不能自称「官方 / 已审核」；白名单里的官方示例除外
+            verified: trusted ? 'official' : 'unverified',
             source: 'community',
+            trusted: trusted,
             __base: base
         };
+        const claims = parseClaims(raw.claims);
+        if (claims) item.claims = claims;
 
         if (type === 'theme') {
             const src = (raw.apply && typeof raw.apply === 'object') ? raw.apply : {};
@@ -1752,7 +2076,9 @@ const Workshop = (function () {
                 item.cssFile = raw.cssFile;
             }
             if (typeof raw.css === 'string' && raw.css.length <= 65536) item.css = raw.css;
-            if (!item.cssFile && !item.css) return null;   // 主题必须有样式来源
+            // 主题至少要有一样「能看出效果」的东西：样式表，或 apply 里的设置项
+            // （官方示例 theme-neon 就是只有 apply、没有 CSS 的最简形态）
+            if (!item.cssFile && !item.css && !Object.keys(item.apply).length) return null;
             item.htmlClass = (typeof raw.htmlClass === 'string' && /^[A-Za-z0-9_-]{1,60}$/.test(raw.htmlClass))
                 ? raw.htmlClass : ('pickcat-theme-' + id);
             return item;
@@ -1773,13 +2099,40 @@ const Workshop = (function () {
         if (typeof raw.sha256 === 'string' && /^[a-f0-9]{64}$/i.test(raw.sha256)) item.sha256 = raw.sha256.toLowerCase();
 
         if (Array.isArray(raw.settings)) {
-            const fields = raw.settings.filter((f) => f && ID_RE.test(str(f.key, 50))).slice(0, 12).map((f) => ({
-                key: str(f.key, 50),
-                label: str(f.label, 40) || str(f.key, 50),
-                type: f.type === 'password' ? 'password' : 'text',
-                default: str(f.default, 300),
-                placeholder: str(f.placeholder, 60)
-            }));
+            const TYPES = ['text', 'password', 'select', 'number', 'switch'];
+            const fields = raw.settings.filter((f) => f && ID_RE.test(str(f.key, 50))).slice(0, 12).map((f) => {
+                const type = TYPES.indexOf(f.type) >= 0 ? f.type : 'text';
+                const out = {
+                    key: str(f.key, 50),
+                    label: str(f.label, 40) || str(f.key, 50),
+                    type: type,
+                    placeholder: str(f.placeholder, 60),
+                    hint: str(f.hint, 80)
+                };
+                if (type === 'switch') {
+                    out.default = !!f.default;
+                } else if (type === 'number') {
+                    out.default = typeof f.default === 'number' ? f.default : 0;
+                    if (typeof f.min === 'number') out.min = f.min;
+                    if (typeof f.max === 'number') out.max = f.max;
+                } else if (type === 'select') {
+                    const opts = (Array.isArray(f.options) ? f.options : []).slice(0, 20).map((o) => {
+                        if (o && typeof o === 'object') {
+                            const value = str(o.value, 60);
+                            if (!value) return null;
+                            return { value: value, label: str(o.label, 40) || value };
+                        }
+                        const v = str(o, 60);
+                        return v ? v : null;
+                    }).filter(Boolean);
+                    if (!opts.length) return null;          // 没有可选项的 select 直接丢掉
+                    out.options = opts;
+                    out.default = str(f.default, 60) || (typeof opts[0] === 'object' ? opts[0].value : opts[0]);
+                } else {
+                    out.default = str(f.default, 300);
+                }
+                return out;
+            }).filter(Boolean);
             if (fields.length) item.settings = fields;
         }
         return item;
@@ -1813,8 +2166,11 @@ const Workshop = (function () {
     async function fetchJson(url, ms) {
         const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
         const timer = setTimeout(() => { if (ctrl) { try { ctrl.abort(); } catch (e) { /* ignore */ } } }, ms || 5000);
+        // raw.githubusercontent.com 的 max-age 是 300 秒，而且 GB 级代理/运营商可能缓存更久。
+        // 光靠 cache:'no-store' 不能 100% 保证拿到新内容，所以再拼一个时间戳把 URL 本身变掉。
+        const bust = /^https?:/i.test(url) ? (url + (url.indexOf('?') >= 0 ? '&' : '?') + '_pcb=' + Date.now()) : url;
         try {
-            const res = await fetch(url, ctrl ? { signal: ctrl.signal, cache: 'no-cache' } : {});
+            const res = await fetch(bust, ctrl ? { signal: ctrl.signal, cache: 'no-store' } : { cache: 'no-store' });
             if (!res.ok) throw new Error('HTTP ' + res.status);
             return await res.json();
         } finally {
@@ -1828,21 +2184,24 @@ const Workshop = (function () {
         for (let i = 0; i < bases.length; i++) {
             const base = bases[i];
             try {
-                const json = await fetchJson(base + 'workshop/community.json', 5000);
+                const json = await fetchJson(base + 'workshop/community.json', 8000);
                 const raw = Array.isArray(json && json.items) ? json.items : [];
                 return { items: raw.slice(0, 200), base: base, updated: str(json && json.updated, 40), local: 0 };
             } catch (e) {
                 lastErr = e;
-                console.warn('[pickcat-workshop] CDN 不可达：' + base, e && e.message || e);
+                // 用 console.info 而不是 warn：源站偶尔抽风/超时属于正常降级，
+                // 用 warn 会被 Chrome 记进 chrome://extensions 的「错误」页，吓到用户。
+                const why = (e && e.name === 'AbortError') ? '请求超时' : ((e && e.message) || String(e));
+                console.info('[pickcat-workshop] 该源暂不可用，换下一个：' + base + '（' + why + '）');
             }
         }
-        // 四个镜像都挂了（或者仓库还没推上去）：退回扩展自带的 community.json，
+        // 六个源都挂了（或者仓库还没推上去）：退回扩展自带的 community.json，
         // 这样刚装上的用户也能立刻看到社区主题，等 CDN 通了再自动换成最新的
         try {
             const res = await fetch(chrome.runtime.getURL('workshop/community.json'));
             const json = await res.json();
             const raw = Array.isArray(json && json.items) ? json.items : [];
-            console.warn('[pickcat-workshop] 已回退到本地 community.json（' + raw.length + ' 条）');
+            console.info('[pickcat-workshop] 已回退到本地 community.json（' + raw.length + ' 条）');
             return { items: raw.slice(0, 200), base: '', updated: str(json && json.updated, 40), local: 1 };
         } catch (e) {
             throw lastErr || e;
@@ -1855,6 +2214,7 @@ const Workshop = (function () {
         catalog = kept.concat(items);
         remoteMerged = items.length;
         remoteSyncedAt = payload.at || 0;
+        remoteUpdated = payload.updated || '';
     }
 
     async function refreshCommunity(builtinIds) {
@@ -1869,8 +2229,8 @@ const Workshop = (function () {
             got.items.forEach((raw) => {
                 const it = sanitizeItem(raw, got.base);
                 if (!it) {
-                    // 方便投稿者自查：坏条目会被静默丢掉，但控制台留个线索
-                    console.warn('[pickcat-workshop] 丢弃不合格的社区条目：', raw && raw.id, raw && (raw.cssFile || raw.entry));
+                    // 方便投稿者自查：坏条目会被静默丢掉，但控制台留个线索（info 不进错误页）
+                    console.info('[pickcat-workshop] 丢弃不合格的社区条目：', raw && raw.id, raw && (raw.cssFile || raw.entry));
                     return;
                 }
                 if (seen[it.id] || builtin[it.id]) return;
@@ -1881,9 +2241,10 @@ const Workshop = (function () {
             applyCommunity(payload, builtin);
             await set({ [CATALOG_CACHE_KEY]: payload });
             render();
+            console.info('[pickcat-workshop] 社区清单：源=' + got.base + ' updated=' + (got.updated || '-') + ' 条目=' + items.length);
             return 'ok';
         } catch (e) {
-            console.warn('[pickcat-workshop] 社区清单拉取失败：', e);
+            console.info('[pickcat-workshop] 社区清单拉取失败：', e && e.message || e);
             return 'fail';
         }
     }
@@ -1950,9 +2311,11 @@ const Workshop = (function () {
     }
 
     function badgeOf(item) {
-        if (item.verified === 'official') return '<span class="ws-badge">✅ 官方</span>';
+        // 注意：这里刻意不出现「官方」二字。PICKCAT Plus 是第三方扩展，
+        // 在 PICKCAT 站内把「官方」等同于点猫官方，容易被读成冒充。
+        if (item.verified === 'official') return '<span class="ws-badge">✅ 内置</span>';
         if (item.verified === 'reviewed') return '<span class="ws-badge">✅ 已审核</span>';
-        if (item.source === 'community') return '<span class="ws-badge warn">🌐 社区 · 未审核</span>';
+        if (item.source === 'community') return '<span class="ws-badge warn">🌐 社区 · 未经审核</span>';
         return '<span class="ws-badge warn">⚠️ 未审核</span>';
     }
 
@@ -1965,6 +2328,23 @@ const Workshop = (function () {
         }).join('');
     }
 
+    function modeTag(item) {
+        const m = item.mode || 'any';
+        if (m === 'any') return '';
+        const cur = isDarkMode() ? 'dark' : 'light';
+        const mismatch = cur !== m;
+        const label = m === 'dark' ? '🌙 深色专用' : '☀️ 浅色专用';
+        const tip = mismatch ? '当前页面是' + (cur === 'dark' ? '深色' : '浅色') + '模式，与该条目推荐的模式不一致'
+            : '与当前页面配色匹配';
+        return `<span class="ws-tag${mismatch ? ' warn' : ''}" title="${esc(tip)}">${label}${mismatch ? ' · 不匹配' : ''}</span>`;
+    }
+
+    function claimTags(item) {
+        const n = (item.claims || []).length;
+        if (!n) return '';
+        return `<span class="ws-tag claim" title="安装后会接管你的 ${n} 项设置；卸载或点面板里的「释放」即恢复原值">🔒 接管 ${n} 项设置</span>`;
+    }
+
     function cardHtml(item) {
         const inst = isInstalled(item.id);
         const rec = state.installed[item.id] || {};
@@ -1974,16 +2354,26 @@ const Workshop = (function () {
         const preview = previewBg ? `<div class="ws-preview" style="background:${esc(previewBg)}"></div>` : '';
 
         let actions = '';
-        if (!inst) {
+        if (item.__broken) {
+            actions = `<button class="ws-btn" disabled title="这个条目的文件已经被作者删除或改名，装不了；可以等作者修复或让作者重新投稿">⚠️ 资源缺失</button>`;
+        } else if (!inst) {
             actions = `<button class="ws-btn primary" data-act="install" data-id="${esc(item.id)}">安装</button>`;
         } else if (item.type === 'theme') {
             actions = `<button class="ws-btn danger" data-act="uninstall" data-id="${esc(item.id)}">卸载</button>`;
         } else {
             const on = rec.enabled !== false;
-            actions =
-                `<button class="ws-btn" data-act="toggle" data-id="${esc(item.id)}">${on ? '停用' : '启用'}</button>` +
-                (item.settings ? `<button class="ws-btn" data-act="gear" data-id="${esc(item.id)}">⚙</button>` : '') +
-                `<button class="ws-btn danger" data-act="uninstall" data-id="${esc(item.id)}">卸载</button>`;
+            if (rec.crashed) {
+                actions = `<button class="ws-btn primary" data-act="revive" data-id="${esc(item.id)}" title="它上次因为死循环或无响应被强制停用了；确认没问题的话点这里重启">⚡ 已停用 · 重试</button>` +
+                    `<button class="ws-btn danger" data-act="uninstall" data-id="${esc(item.id)}">卸载</button>`;
+            } else if (rec.needsConfirm) {
+                actions = `<button class="ws-btn primary" data-act="reconfirm" data-id="${esc(item.id)}" title="作者更新了代码，需要你重新确认它申请的权限">🔐 代码已更新 · 重新确认</button>` +
+                    `<button class="ws-btn danger" data-act="uninstall" data-id="${esc(item.id)}">卸载</button>`;
+            } else {
+                actions =
+                    `<button class="ws-btn" data-act="toggle" data-id="${esc(item.id)}">${on ? '停用' : '启用'}</button>` +
+                    (item.settings ? `<button class="ws-btn" data-act="gear" data-id="${esc(item.id)}">⚙</button>` : '') +
+                    `<button class="ws-btn danger" data-act="uninstall" data-id="${esc(item.id)}">卸载</button>`;
+            }
         }
 
         let settings = '';
@@ -1991,10 +2381,27 @@ const Workshop = (function () {
             settings = `<div class="ws-settings" data-settings="${esc(item.id)}">` +
                 item.settings.map((f) => {
                     const val = ((pluginData[item.id] || {}).settings || {})[f.key];
-                    const v = val !== undefined ? val : (f.default || '');
-                    return `<label>${esc(f.label)}</label>` +
-                        `<input type="${f.type === 'password' ? 'password' : 'text'}" data-field="${esc(f.key)}" ` +
-                        `value="${esc(v)}" placeholder="${esc(f.placeholder || '')}">`;
+                    const v = val !== undefined ? val : (f.default !== undefined ? f.default : '');
+                    const label = `<label>${esc(f.label || f.key)}</label>`;
+                    const hint = f.hint ? `<div class="ws-hint">${esc(f.hint)}</div>` : '';
+                    if (f.type === 'switch') {
+                        return `<label class="ws-switch-row"><input type="checkbox" data-field="${esc(f.key)}" data-kind="bool" ${v ? 'checked' : ''}><span>${esc(f.label || f.key)}</span></label>` + hint;
+                    }
+                    if (f.type === 'select') {
+                        const opts = (f.options || []).map((o) => {
+                            const ov = typeof o === 'object' ? o.value : o;
+                            const ol = typeof o === 'object' ? (o.label || o.value) : o;
+                            return `<option value="${esc(ov)}" ${String(v) === String(ov) ? 'selected' : ''}>${esc(ol)}</option>`;
+                        }).join('');
+                        return label + `<select data-field="${esc(f.key)}">${opts}</select>` + hint;
+                    }
+                    if (f.type === 'number') {
+                        return label + `<input type="number" data-field="${esc(f.key)}" value="${esc(v)}" ` +
+                            `min="${f.min !== undefined ? esc(f.min) : ''}" max="${f.max !== undefined ? esc(f.max) : ''}" ` +
+                            `placeholder="${esc(f.placeholder || '')}">` + hint;
+                    }
+                    return label + `<input type="${f.type === 'password' ? 'password' : 'text'}" data-field="${esc(f.key)}" ` +
+                        `value="${esc(v)}" placeholder="${esc(f.placeholder || '')}">` + hint;
                 }).join('') +
                 `<div class="ws-hint">填入后自动保存。Key 只存在本机 chrome.storage，不会上传到任何服务器。</div>` +
                 `</div>`;
@@ -2006,19 +2413,44 @@ const Workshop = (function () {
                 <span class="ws-name">${esc(item.name)}</span>
                 ${badgeOf(item)}
             </div>
+            <div class="ws-author">by ${esc(item.author || '匿名')}</div>
             ${preview}
             <div class="ws-desc">${esc(item.desc || '')}</div>
-            <div class="ws-tags">${permsTags(item)}</div>
+            <div class="ws-tags">${permsTags(item)}${modeTag(item)}${claimTags(item)}</div>
             <div class="ws-actions">${actions}</div>
             ${settings}
         </div>`;
     }
 
+    // 已安装但清单里已经没有的条目（作者下架 / 目录被删），留一张卡片让它能被卸载
+    function ghostHtml(id) {
+        const rec = state.installed[id] || {};
+        const kind = rec.type === 'plugin' ? '插件' : '主题';
+        return `<div class="ws-card" data-card="${esc(id)}">
+            <div class="ws-card-head">
+                <span class="ws-emoji">🗂</span>
+                <span class="ws-name">${esc(rec.name || id)}</span>
+                <span class="ws-badge warn">已下架</span>
+            </div>
+            <div class="ws-author">${esc(id)}</div>
+            <div class="ws-desc">这个${kind}已经不在清单里了，但本机还留着它写过的设置。卸载会把它们还原。</div>
+            <div class="ws-actions"><button class="ws-btn danger" data-act="uninstall" data-id="${esc(id)}">卸载</button></div>
+        </div>`;
+    }
+
     function render() {
         if (!els.grid) return;
-        const list = catalog.filter((i) => matchFilter(i) && matchKeyword(i));
-        els.grid.innerHTML = list.length
-            ? list.map(cardHtml).join('')
+        const kw = keyword;
+        // hidden 的条目不在列表里露出（留作开发自测；已装的照常运行，卸载后也不会变成「已下架」）
+        const list = catalog.filter((i) => !i.hidden && matchFilter(i) && matchKeyword(i));
+        const ghosts = [];
+        if (!kw) {
+            const known = {};
+            catalog.forEach((i) => { known[i.id] = true; });
+            Object.keys(state.installed).forEach((id) => { if (!known[id]) ghosts.push(id); });
+        }
+        els.grid.innerHTML = (list.length || ghosts.length)
+            ? list.map(cardHtml).join('') + ghosts.map(ghostHtml).join('')
             : '<div class="ws-empty">没找到匹配的条目<br>换个关键词试试？</div>';
 
         const total = Object.keys(state.installed).length;
@@ -2026,9 +2458,12 @@ const Workshop = (function () {
         if (remoteMerged) {
             const mins = remoteSyncedAt ? Math.max(0, Math.round((Date.now() - remoteSyncedAt) / 60000)) : -1;
             line += ` · 🌐 社区 ${remoteMerged} 个` + (mins >= 0 ? `（${mins} 分钟前同步）` : '');
+            if (remoteUpdated) line += ` · 清单 ${String(remoteUpdated).slice(0, 16).replace('T', ' ')}`;
         }
         els.status.textContent = line;
         els.safeMode.checked = !!state.safeMode;
+        const claimIds = catalog.filter((i) => i.claims && i.claims.length).map((i) => i.id).join(',') || '(无)';
+        console.info('[pickcat-workshop] 渲染：条目 ' + catalog.length + ' 个 · 带接管声明 ' + claimIds);
 
         Array.prototype.forEach.call(els.chips.children, (c) => {
             c.classList.toggle('active', c.dataset.filter === filterCat);
@@ -2036,6 +2471,86 @@ const Workshop = (function () {
     }
 
     /* ---------------- 权限确认 ---------------- */
+
+    /* ---------- 免责协议（首次进工坊 / 首次装插件必须签） ---------- */
+    let consentPromise = null;
+    let consentModal = null;
+
+    function readConsent() {
+        return new Promise((resolve) => {
+            try {
+                chrome.storage.local.get([CONSENT_KEY], (res) => {
+                    if (chrome.runtime.lastError) return resolve(false);
+                    const c = (res && res[CONSENT_KEY]) || null;
+                    resolve(!!(c && c.v >= CONSENT_VERSION));
+                });
+            } catch (e) { resolve(false); }
+        });
+    }
+
+    function ensureConsent() {
+        // 同一次会话里多次调用只问一次
+        if (consentPromise) return consentPromise;
+        consentPromise = readConsent().then((ok) => {
+            if (ok) return true;
+            return new Promise((resolve) => showConsent(resolve));
+        }).then((ok) => {
+            consentPromise = null;
+            return ok;
+        });
+        return consentPromise;
+    }
+
+    function showConsent(done) {
+        if (consentModal) {
+            consentModal.__done = done;
+            consentModal.classList.add('open');
+            return;
+        }
+        const wrap = document.createElement('div');
+        wrap.className = 'ws-modal ws-consent';
+        wrap.innerHTML = `<div class="ws-modal-card" style="max-width:520px">
+            <h3 class="ws-modal-title">⚠️ 用之前，请先看一眼</h3>
+            <p class="ws-modal-sub">创意工坊里的主题和插件，来自<b>第三方作者</b>，不是点猫官方出品，也不是 PICKCAT Plus 官方审核过的。请在理解下面几条之后再用。</p>
+            <div class="ws-perm-list">
+                <div class="ws-perm"><span>📦</span><span class="ws-perm-txt"><b>主题是纯数据</b><br>只是背景图和几条设置，不执行任何代码，风险极低。</span></div>
+                <div class="ws-perm"><span>📜</span><span class="ws-perm-txt"><b>插件是会跑的代码</b><br>它跑在隔离开的沙盒里，看不到你的账号、Cookie 和输入框内容，也读不到网页。</span></div>
+                <div class="ws-perm"><span>🛡</span><span class="ws-perm-txt"><b>我们挡得住什么</b><br>沙盒物理断网（联网只能走我们代发，且必须申报域名）；死循环 12 秒被强制掐掉；代码一改就要你重新确认；任意时刻可卸载，也能一键「安全模式」全停。</span></div>
+                <div class="ws-perm high"><span>⚠️</span><span class="ws-perm-txt"><b>我们挡不住什么</b><br>我们没有能力逐行人工审核。插件可以在<b>它申报的域名</b>范围内把内容发出去（比如你填的 API Key）。所以：只装你愿意相信的作者，别填你输不起的东西。</span></div>
+            </div>
+            <label class="ws-consent-check">
+                <input type="checkbox" id="wsConsentBox">
+                <span>我已阅读并理解以上内容，自愿承担使用第三方插件的风险。</span>
+            </label>
+            <div class="ws-modal-foot">
+                <button class="ws-btn" data-consent="no">先不用了</button>
+                <button class="ws-btn primary" data-consent="yes" id="wsConsentOk" disabled>同意并继续</button>
+            </div>
+        </div>`;
+        shadow.appendChild(wrap);
+        const box = wrap.querySelector('#wsConsentBox');
+        const okBtn = wrap.querySelector('#wsConsentOk');
+        box.addEventListener('change', () => { okBtn.disabled = !box.checked; });
+        wrap.addEventListener('click', (ev) => {
+            const act = ev.target && ev.target.dataset && ev.target.dataset.consent;
+            if (act !== 'yes' && act !== 'no') return;
+            if (act === 'yes' && !box.checked) return;
+            wrap.classList.remove('open');
+            box.checked = false;
+            okBtn.disabled = true;
+            if (act === 'yes') {
+                try {
+                    chrome.storage.local.set({ [CONSENT_KEY]: { v: CONSENT_VERSION, at: Date.now() } });
+                } catch (e) { /* 记不住就下次再问，不阻断使用 */ }
+            }
+            const fn = wrap.__done;
+            wrap.__done = null;
+            if (fn) fn(act === 'yes');
+        });
+        wrap.__done = done;
+        consentModal = wrap;
+        wrap.classList.add('open');
+    }
 
     function ensureModal() {
         if (els.modal) return els.modal;
@@ -2069,18 +2584,44 @@ const Workshop = (function () {
     }
 
     function confirmInstall(item) {
-        return new Promise((resolve) => {
+        return ensureConsent().then((agree) => {
+            if (!agree) return false;
+            return new Promise((resolve) => {
             const modal = ensureModal();
             els.modalTitle.textContent = `安装「${item.name}」`;
             els.modalSub.textContent = item.type === 'theme'
                 ? '这是一个主题包，纯数据、不含代码，会覆盖你当前的背景/指针设置（卸载时会还原）。'
                 : '这是一个功能插件，代码将运行在受限沙盒里。它申请了以下能力：';
 
-            const communityWarn = item.source === 'community'
+            const communityWarn = (item.source === 'community' && !item.trusted)
                 ? `<div class="ws-perm high"><span>🌐</span><span class="ws-perm-txt"><b>社区内容，非官方</b><br>来自社区作者「${esc(item.author)}」，我们只做了自动检查，没有人工逐行审核。出问题请在工坊里卸载。</span></div>`
                 : '';
+
+            // 非社区条目也把作者写出来（社区块里已经带了作者，不重复）
+            const authorBlock = ((item.source !== 'community' || item.trusted) && item.author)
+                ? `<div class="ws-perm"><span>✍️</span><span class="ws-perm-txt">作者：${esc(item.author)}</span></div>`
+                : '';
+
+            // 明暗模式不匹配提醒
+            let modeWarn = '';
+            if (item.mode === 'dark' || item.mode === 'light') {
+                const cur = isDarkMode() ? 'dark' : 'light';
+                if (cur !== item.mode) {
+                    modeWarn = `<div class="ws-perm high"><span>${item.mode === 'dark' ? '🌙' : '☀️'}</span>` +
+                        `<span class="ws-perm-txt"><b>配色可能不搭</b><br>你当前是${cur === 'dark' ? '深色' : '浅色'}模式，` +
+                        `这个条目是给${item.mode === 'dark' ? '深色' : '浅色'}模式做的。装上去可能看不清文字，照样能装。</span></div>`;
+                }
+            }
+
+            // 安装后会接管的设置项
+            const claimBlock = (item.claims || []).length
+                ? `<div class="ws-perm claim"><span>🔒</span><span class="ws-perm-txt"><b>安装后会被接管的设置（${item.claims.length} 项）</b><br>` +
+                  item.claims.map((c) => '· ' + esc(c.label) + (c.reason ? '（' + esc(c.reason) + '）' : '')).join('<br>') +
+                  '<br>原值不会被覆盖，卸载后自动恢复。</span></div>'
+                : '';
+
             if (item.type === 'theme') {
-                els.modalList.innerHTML = communityWarn + '<div class="ws-perm"><span class="ws-perm-txt">🎨 修改背景图 / 遮罩 / 鼠标指针</span></div>';
+                els.modalList.innerHTML = authorBlock + communityWarn + modeWarn + claimBlock + '<div class="ws-perm"><span class="ws-perm-txt">🎨 修改背景图 / 遮罩 / 鼠标指针</span></div>';
             } else {
                 const perms = (item.permissions || []).map((p) => {
                     const d = WS_PERM_DEFS[p] || { level: 'low', icon: '·', label: p, desc: '' };
@@ -2091,11 +2632,12 @@ const Workshop = (function () {
                 const hosts = (item.hosts || []).length
                     ? `<div class="ws-perm high"><span>🌐</span><span class="ws-perm-txt"><b>可访问的域名</b><br>${esc(item.hosts.join('、'))}</span></div>`
                     : '';
-                els.modalList.innerHTML = communityWarn + perms + hosts;
+                els.modalList.innerHTML = authorBlock + communityWarn + modeWarn + claimBlock + perms + hosts;
             }
 
-            pendingConfirm = resolve;
-            modal.classList.add('open');
+                    pendingConfirm = resolve;
+                    modal.classList.add('open');
+                });
         });
     }
 
@@ -2114,6 +2656,8 @@ const Workshop = (function () {
         const active = state.skin;
         if (active && active.cls) document.documentElement.classList.remove(active.cls);
         state.skin = null;
+        activeThemeMode = 'any';
+        activeThemeName = '';
     }
 
     async function fetchSkinCss(item) {
@@ -2132,7 +2676,12 @@ const Workshop = (function () {
     }
 
     async function applySkin(item) {
-        if (!item || (!item.css && !item.cssFile)) return true;
+        if (!item) return true;
+        // 只改设置、没有样式表的主题（如官方示例）也要记下配色倾向
+        activeThemeMode = item.mode || 'any';
+        activeThemeName = item.name || '';
+        themeModeWarned = false;
+        if (!item.css && !item.cssFile) return true;
         let css = '';
         try {
             css = await fetchSkinCss(item);
@@ -2150,10 +2699,44 @@ const Workshop = (function () {
         const cls = skinClassOf(item);
         document.documentElement.classList.add(cls);
         state.skin = { id: item.id, cls: cls };
+        // 记住这套皮肤的配色倾向，供 syncShadowTheme 做「模式不搭」提醒
+        activeThemeMode = item.mode || 'any';
+        activeThemeName = item.name || '';
+        themeModeWarned = false;
         return true;
     }
 
     /* ---------------- 安装 / 卸载 ---------------- */
+
+    // 把插件的 claims 登记进租约栈（后装的优先），不覆盖用户原值
+    async function pushClaims(item) {
+        if (!item.claims || !item.claims.length) return;
+        const res = await get([CLAIMS_KEY]);
+        const claims = (res[CLAIMS_KEY] && typeof res[CLAIMS_KEY] === 'object') ? res[CLAIMS_KEY] : {};
+        item.claims.forEach((c) => {
+            const arr = Array.isArray(claims[c.key]) ? claims[c.key].filter((x) => x && x.id !== item.id) : [];
+            if (arr.length >= CLAIM_MAX_PER_KEY) return;   // 抢的插件太多，这一项就不接了
+            arr.push({ id: item.id, name: item.name, value: c.value, label: c.label, at: Date.now() });
+            claims[c.key] = arr;
+        });
+        await set({ [CLAIMS_KEY]: claims });
+    }
+
+    // 撕掉某个插件的全部租约
+    async function dropClaims(id) {
+        const res = await get([CLAIMS_KEY]);
+        const claims = (res[CLAIMS_KEY] && typeof res[CLAIMS_KEY] === 'object') ? res[CLAIMS_KEY] : {};
+        let changed = false;
+        Object.keys(claims).forEach((k) => {
+            const arr = Array.isArray(claims[k]) ? claims[k] : [];
+            const next = arr.filter((x) => !(x && x.id === id));
+            if (next.length !== arr.length) {
+                changed = true;
+                if (next.length) claims[k] = next; else delete claims[k];
+            }
+        });
+        if (changed) await set({ [CLAIMS_KEY]: claims });
+    }
 
     async function install(item) {
         const ok = await confirmInstall(item);
@@ -2167,6 +2750,9 @@ const Workshop = (function () {
             await set(item.apply || {});
             const skinOk = await applySkin(item);
             if (!skinOk) {
+                // 样式表 404 / 被删：标成「资源缺失」，卡片上直接提示，别让人反复点
+                item.__broken = true;
+                render();
                 // 样式表没加载 / 没过审：别把设置改到半截状态
                 const back = {};
                 Object.keys(prev).forEach((k) => { back[k] = prev[k] === undefined ? '' : prev[k]; });
@@ -2174,14 +2760,16 @@ const Workshop = (function () {
                 loadAllConfigs();
                 return;
             }
-            state.installed[item.id] = { type: 'theme', version: item.version, prev: prev, at: Date.now() };
+            state.installed[item.id] = { type: 'theme', version: item.version, name: item.name, prev: prev, claimVer: item.version, at: Date.now() };
         } else {
             state.installed[item.id] = {
                 type: 'plugin',
                 version: item.version,
+                name: item.name,
                 enabled: true,
                 permissions: item.permissions || [],
                 hosts: item.hosts || [],
+                claimVer: item.version,
                 at: Date.now()
             };
             if (!pluginData[item.id]) {
@@ -2192,15 +2780,31 @@ const Workshop = (function () {
             }
         }
 
+        await pushClaims(item);
         await saveState();
         render();
+        loadAllConfigs();
+        if (panelRefreshHook) { try { panelRefreshHook(); } catch (e) { /* ignore */ } }
         if (item.type === 'theme') {
-            loadAllConfigs();
             toast(`已应用主题「${item.name}」`);
         } else {
             toast(`已安装「${item.name}」`);
             await runPlugins();
         }
+    }
+
+    // 作者更新了代码：重新走一遍「权限确认」，确认后放行新指纹
+    async function reconfirm(item) {
+        const ok = await confirmInstall(item);
+        if (!ok) return;
+        const rec = state.installed[item.id];
+        if (!rec) return;
+        rec.needsConfirm = false;
+        if (rec.newHash) { rec.codeHash = rec.newHash; delete rec.newHash; }
+        await saveState();
+        render();
+        toast('已确认「' + item.name + '」的新版本，插件马上就绪');
+        runPlugins();
     }
 
     async function uninstall(id) {
@@ -2222,9 +2826,12 @@ const Workshop = (function () {
             delete pluginData[id];
         }
 
+        await dropClaims(id);
         delete state.installed[id];
         await saveState();
         render();
+        loadAllConfigs();
+        if (panelRefreshHook) { try { panelRefreshHook(); } catch (e) { /* ignore */ } }
         toast(`已卸载「${item ? item.name : id}」`);
     }
 
@@ -2255,6 +2862,10 @@ const Workshop = (function () {
                 }
             });
             toast('⛑ 安全模式已开启，所有插件已停用');
+            // 安全模式 = 一键把所有权还给你：撕掉全部设置租约
+            await set({ [CLAIMS_KEY]: {} });
+            loadAllConfigs();
+            if (panelRefreshHook) { try { panelRefreshHook(); } catch (e) { /* ignore */ } }
         } else {
             toast('安全模式已关闭');
             await runPlugins();
@@ -2336,7 +2947,47 @@ const Workshop = (function () {
             removePluginUi((d.payload || {}).id);
             return;
         }
+
+        if (d.type === 'crashed') {
+            const p = d.payload || {};
+            const ids = (p.ids && p.ids.length) ? p.ids : (p.id ? [p.id] : []);
+            let touched = false;
+            ids.forEach(function (id) {
+                const rec = state.installed[id];
+                if (!rec) return;
+                rec.crashed = true;
+                rec.crashReason = p.reason || '无响应';
+                delete rec.enabled;
+                touched = true;
+                const item = itemById(id);
+                toast('⚡「' + (item ? item.name : id) + '」无响应，已强制停用：' + (rec.crashReason || '') +
+                    '。页面没事，可以在这儿点「重试」。', 9000);
+                removePluginUi(id);
+            });
+            if (!touched) return;
+            saveState();
+            render();
+            return;
+        }
+
+        if (d.type === 'worker-failed') {
+            console.warn('[pickcat-workshop] 插件运行时启动失败：' + ((d.payload || {}).error || ''));
+            return;
+        }
     });
+
+    // 用户点「重试」：清掉卡死标记，重建 Worker，重新跑一遍
+    async function revivePlugin(id) {
+        const rec = state.installed[id];
+        if (!rec) return;
+        delete rec.crashed;
+        delete rec.crashReason;
+        await saveState();
+        sendToSandbox({ type: 'revive' });
+        render();
+        toast('正在重启「' + (itemById(id) ? itemById(id).name : id) + '」…');
+        setTimeout(function () { runPlugins(); }, 300);
+    }
 
     const NEED_PERM = {
         getPostContent: 'dom-read',
@@ -2346,22 +2997,89 @@ const Workshop = (function () {
         closeCard: 'ui-interaction',
         showToast: 'notify',
         copy: 'clipboard-write',
-        'storage.set': 'storage'
+        'storage.set': 'storage',
+        fetch: 'network'
     };
+
+    // 插件消息配额：单插件每秒最多 60 条，防止恶意插件刷爆宿主
+    const MSG_QUOTA = 60;
+    const msgBuckets = new Map();   // pluginId -> { t, n }
+    function checkQuota(pluginId) {
+        const now = Date.now();
+        let b = msgBuckets.get(pluginId);
+        if (!b || now - b.t > 1000) { b = { t: now, n: 0 }; msgBuckets.set(pluginId, b); }
+        b.n++;
+        if (b.n > MSG_QUOTA) {
+            throw new Error('调用太频繁（超过 ' + MSG_QUOTA + ' 次/秒），已限流');
+        }
+    }
+
+    // 宿主侧再判一遍 hosts 白名单：沙盒里的判断不能当安全依据
+    function hostAllowed(hosts, url) {
+        let u;
+        try { u = new URL(String(url)); } catch (e) { return false; }
+        if (u.protocol !== 'https:') return false;
+        const host = u.hostname.toLowerCase();
+        return (hosts || []).some((h) => {
+            h = String(h).toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^\*\./, '');
+            return host === h || host.slice(-(h.length + 1)) === '.' + h;
+        });
+    }
+
+    // 唯一的网络出口：交给 background service worker
+    function proxyFetch(pluginId, args) {
+        const rec = state.installed[pluginId];
+        if (!hostAllowed(rec.hosts, args && args.url)) {
+            return Promise.reject(new Error('域名不在该插件的 hosts 白名单内，请求已被拦截'));
+        }
+        return new Promise((resolve, reject) => {
+            let done = false;
+            const timer = setTimeout(() => {
+                if (done) return;
+                done = true;
+                reject(new Error('网络请求超时'));
+            }, 32000);
+            try {
+                chrome.runtime.sendMessage({
+                    type: 'pickcat-net',
+                    payload: {
+                        url: args.url,
+                        method: args.method || 'GET',
+                        headers: args.headers || {},
+                        body: args.body
+                    }
+                }, (res) => {
+                    if (done) return;
+                    done = true;
+                    clearTimeout(timer);
+                    const err = chrome.runtime.lastError;
+                    if (err) { reject(new Error('网络通道不可用：' + err.message)); return; }
+                    resolve(res || { ok: false, error: '没有拿到响应' });
+                });
+            } catch (e) {
+                if (done) return;
+                done = true;
+                clearTimeout(timer);
+                reject(new Error('网络通道不可用：' + ((e && e.message) || e)));
+            }
+        });
+    }
 
     function handleCall(method, args, pluginId) {
         const rec = state.installed[pluginId];
         if (!rec || rec.type !== 'plugin') throw new Error('插件 ' + pluginId + ' 未安装或已停用');
+        checkQuota(pluginId);
         const need = NEED_PERM[method];
         if (need && (rec.permissions || []).indexOf(need) === -1) {
             throw new Error('插件没有申请「' + need + '」权限，调用被拒绝');
         }
 
         switch (method) {
+            case 'fetch': return proxyFetch(pluginId, args || {});
             case 'getPostContent': return getPostContent();
             case 'addInteractionButton': return addButton(pluginId, args);
             case 'removeInteractionButton': removeButton(args.buttonId); return true;
-            case 'showCard': return showCard(args);
+            case 'showCard': return showCard(args, pluginId);
             case 'updateCard': updateCard(args.cardId, args.text); return true;
             case 'closeCard': closeCard(args.cardId); return true;
             case 'showToast': toast(args.text); return true;
@@ -2410,6 +3128,11 @@ const Workshop = (function () {
             .pickcat-ws-card .ws-ct { flex: 1; font-weight: 700; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
             .pickcat-ws-card .ws-cx { border: 0; background: transparent; color: #9aa0b4; font-size: 18px; line-height: 1; cursor: pointer; padding: 0 4px; }
             .pickcat-ws-card .ws-cb { padding: 12px; overflow: auto; white-space: pre-wrap; word-break: break-word; font-size: 13px; }
+            .pickcat-ws-card .ws-cb::-webkit-scrollbar { width: 10px; }
+            .pickcat-ws-card .ws-cb::-webkit-scrollbar-track { background: transparent; }
+            .pickcat-ws-card .ws-cb::-webkit-scrollbar-thumb { background-color: rgba(255,255,255,.18);
+                border-radius: 999px; border: 3px solid transparent; background-clip: content-box; }
+            .pickcat-ws-card .ws-cb:hover::-webkit-scrollbar-thumb { background-color: rgba(255,255,255,.34); background-clip: content-box; }
             .pickcat-ws-card .ws-cf { display: flex; gap: 8px; padding: 8px 12px 12px; }
             .pickcat-ws-card .ws-cf button { flex: 1; padding: 7px; border-radius: 8px; border: 1px solid rgba(255,255,255,.16);
                 background: transparent; color: #d7d9e3; font: 600 12px system-ui, sans-serif; cursor: pointer; }
@@ -2467,15 +3190,16 @@ const Workshop = (function () {
             });
             if (!bar.children.length) bar.remove();
         }
-        Array.prototype.slice.call(document.querySelectorAll('#pickcat-ws-card-' + CSS.escape(pluginId))).forEach((c) => c.remove());
+        Array.prototype.slice.call(document.querySelectorAll('.pickcat-ws-card[data-plugin="' + CSS.escape(pluginId) + '"]')).forEach((c) => c.remove());
     }
 
-    function showCard(args) {
+    function showCard(args, pluginId) {
         ensurePageStyle();
         const id = 'pickcat-ws-card-' + (++cardSeq);
         const el = document.createElement('div');
         el.className = 'pickcat-ws-card' + (args.loading ? ' loading' : '');
         el.id = id;
+        if (pluginId) el.dataset.plugin = pluginId;
         el.innerHTML = '<div class="ws-ch"><span class="ws-ct"></span><button class="ws-cx" title="关闭">×</button></div>' +
             '<div class="ws-cb"></div><div class="ws-cf"><button class="ws-copy">复制</button></div>';
         el.querySelector('.ws-ct').textContent = args.title || '插件输出';
@@ -2576,8 +3300,25 @@ const Workshop = (function () {
             const rec = state.installed[id];
             const item = itemById(id);
             if (!item) continue;
+            // 上次卡死过的插件不自动启动，等用户在卡片上点「重试」
+            if (rec.crashed) continue;
             try {
                 const code = await loadPluginCode(item);
+
+                // 代码指纹变了 = 作者换了内容，必须让用户重新确认一次，
+                // 不能因为「已经装过了」就静默升级权限。
+                const hash = await sha256Hex(code);
+                if (hash && rec.codeHash && rec.codeHash !== hash) {
+                    rec.needsConfirm = true;
+                    rec.newHash = hash;
+                    await saveState();
+                    toast('「' + item.name + '」代码已更新，请到创意工坊重新确认');
+                    render();
+                    continue;
+                }
+                if (rec.needsConfirm) continue;      // 等用户确认
+                if (hash && !rec.codeHash) { rec.codeHash = hash; await saveState(); }
+
                 sendToSandbox({
                     type: 'run',
                     payload: {
@@ -2622,10 +3363,14 @@ const Workshop = (function () {
             els.refresh.addEventListener('click', async () => {
                 els.refresh.disabled = true;
                 els.refresh.textContent = '同步中…';
+                // 手动同步 = 不听缓存，先把旧缓存删掉，免得又被它顶回来
+                try { await remove([CATALOG_CACHE_KEY]); } catch (e) { /* ignore */ }
                 const r = await refreshCommunity(null);
                 els.refresh.disabled = false;
                 els.refresh.textContent = '🌐 同步';
-                toast(r === 'ok' ? `社区清单已同步，新增 ${remoteMerged} 个条目` : '社区清单同步失败，先用内置内容');
+                toast(r === 'ok'
+                    ? `社区清单已同步：${remoteMerged} 个条目` + (remoteUpdated ? `（清单 ${String(remoteUpdated).slice(0, 16).replace('T', ' ')}）` : '')
+                    : '社区清单同步失败，先用内置内容');
             });
         }
 
@@ -2638,6 +3383,8 @@ const Workshop = (function () {
             if (act === 'install' && item) install(item);
             else if (act === 'uninstall') uninstall(id);
             else if (act === 'toggle') togglePlugin(id);
+            else if (act === 'reconfirm' && item) reconfirm(item);
+            else if (act === 'revive') revivePlugin(id);
             else if (act === 'gear') {
                 const box = els.grid.querySelector(`[data-settings="${CSS.escape(id)}"]`);
                 if (box) box.classList.toggle('open');
@@ -2652,7 +3399,11 @@ const Workshop = (function () {
             const id = card.dataset.card;
             if (!pluginData[id]) pluginData[id] = {};
             if (!pluginData[id].settings) pluginData[id].settings = {};
-            pluginData[id].settings[input.dataset.field] = input.value;
+            // switch 存 boolean，number 存数字，其余存字符串
+            let val = input.value;
+            if (input.dataset.kind === 'bool' || input.type === 'checkbox') val = !!input.checked;
+            else if (input.type === 'number') val = input.value === '' ? '' : Number(input.value);
+            pluginData[id].settings[input.dataset.field] = val;
             savePluginData(id).then(() => {
                 sendToSandbox({ type: 'storage-sync', payload: { id: id, data: pluginData[id] } });
                 toast('已保存设置');
@@ -2661,6 +3412,27 @@ const Workshop = (function () {
     }
 
     /* ---------------- 对外接口 ---------------- */
+
+    // 老用户补登记：清单里新加了 claims（比如万圣夜惊魂）时，不用卸载重装也能生效。
+    // 只在「已安装版本」和「清单版本」不一致时补一次，这样用户手动点过「释放」不会被反复抢回去。
+    async function syncClaimsFromCatalog() {
+        let touched = false;
+        for (const id of Object.keys(state.installed)) {
+            const item = itemById(id);
+            const rec = state.installed[id];
+            if (!item || !rec || !item.claims || !item.claims.length) continue;
+            if (rec.claimVer === item.version) continue;
+            await pushClaims(item);
+            rec.claimVer = item.version;
+            touched = true;
+            console.info('[pickcat-workshop] 已补登记接管项：', id, item.claims.map((c) => c.key).join(', '));
+        }
+        if (touched) {
+            await saveState();
+            loadAllConfigs();
+            if (panelRefreshHook) { try { panelRefreshHook(); } catch (e) { /* ignore */ } }
+        }
+    }
 
     async function mount(root) {
         shadow = root;
@@ -2686,6 +3458,7 @@ const Workshop = (function () {
 
         await loadCatalog();
         render();
+        await syncClaimsFromCatalog();
 
         // 刷新页面后把皮肤重新贴回去（纯 CSS，不依赖插件沙盒）
         if (state.skin && state.skin.id) {
@@ -2703,6 +3476,12 @@ const Workshop = (function () {
     function onTabOpen() {
         if (!els.grid) return;
         render();
+        // 第一次进工坊就把话说清楚，别等用户装完才发现有风险
+        ensureConsent().then((agree) => {
+            if (!agree) {
+                toast('没同意也没关系，工坊随时可以再来喵～', 4000);
+            }
+        }).catch(() => {});
     }
 
     return { mount: mount, onTabOpen: onTabOpen, run: runPlugins, toast: toast };

@@ -4,46 +4,6 @@
   "note": "PICKCAT Plus 创意工坊·内置清单（阶段 1）。主题是纯数据，插件是 JS，插件代码只在沙盒里跑。",
   "items": [
     {
-      "id": "theme-sakura",
-      "type": "theme",
-      "name": "樱花春日",
-      "emoji": "🌸",
-      "category": "theme",
-      "author": "PICKCAT Plus 官方",
-      "version": "1.0.0",
-      "verified": "official",
-      "desc": "粉樱渐变打底，配亮色柔纱与猫爪指针，春天就住在社区里。",
-      "preview": {
-        "bg": "linear-gradient(160deg,#ffe6f0,#ffd6e7 45%,#fff1f7)"
-      },
-      "apply": {
-        "pickcatBgUrl": "linear-gradient(160deg,#ffe6f0,#ffd6e7 45%,#fff1f7)",
-        "pickcatBgBase64": "",
-        "pickcatMaskEnabled": true,
-        "pickcatCursor": "style1"
-      }
-    },
-    {
-      "id": "theme-neon",
-      "type": "theme",
-      "name": "暗夜霓虹",
-      "emoji": "🌃",
-      "category": "theme",
-      "author": "PICKCAT Plus 官方",
-      "version": "1.0.0",
-      "verified": "official",
-      "desc": "深蓝夜到墨黑的径向渐变，不压一层灰纱，暗色里最通透的一款。",
-      "preview": {
-        "bg": "radial-gradient(120% 90% at 20% 0%, #1b2a4a 0%, #0b1020 55%, #05060d 100%)"
-      },
-      "apply": {
-        "pickcatBgUrl": "radial-gradient(120% 90% at 20% 0%, #1b2a4a 0%, #0b1020 55%, #05060d 100%)",
-        "pickcatBgBase64": "",
-        "pickcatMaskEnabled": false,
-        "pickcatCursor": "style2"
-      }
-    },
-    {
       "id": "theme-halloween",
       "type": "theme",
       "name": "万圣夜惊魂",
@@ -58,6 +18,21 @@
       },
       "cssFile": "workshop/packs/theme-halloween.css",
       "htmlClass": "pickcat-theme-halloween",
+      "mode": "dark",
+      "claims": [
+        {
+          "key": "pickcatMaskEnabled",
+          "value": false,
+          "label": "背景遮罩",
+          "reason": "夜色背景再叠一层灰纱会发闷，也会糊掉月亮。"
+        },
+        {
+          "key": "pickcatCursor",
+          "value": "custom",
+          "label": "鼠标指针",
+          "reason": "配套的南瓜指针，换成别的就不像万圣夜了。"
+        }
+      ],
       "apply": {
         "pickcatBgUrl": "",
         "pickcatBgBase64": "",
@@ -72,7 +47,7 @@
       "name": "AI 总结",
       "emoji": "✨",
       "category": "ai",
-      "author": "PICKCAT Plus 官方",
+      "author": "PICKCAT Plus",
       "version": "1.0.0",
       "verified": "official",
       "desc": "左下角点一下，把这篇帖子缩成 3-5 条要点。自带 Key，直连 DeepSeek，不经过任何中转。",
@@ -101,15 +76,46 @@
         {
           "key": "model",
           "label": "模型",
-          "type": "text",
-          "default": "deepseek-chat"
+          "type": "select",
+          "default": "deepseek-chat",
+          "options": [
+            "deepseek-chat",
+            "deepseek-reasoner",
+            "moonshot-v1-8k",
+            "gpt-4o-mini"
+          ],
+          "hint": "换模型记得把下面「接口地址」一起改。"
         },
         {
           "key": "baseUrl",
           "label": "接口地址",
           "type": "text",
-          "default": "https://api.deepseek.com/chat/completions"
+          "default": "https://api.deepseek.com/chat/completions",
+          "hint": "必须和上面模型对应，且域名要在本插件的 hosts 白名单里。"
         }
+      ]
+    },
+    {
+      "id": "security-lab",
+      "type": "plugin",
+      "name": "安全实验室",
+      "emoji": "🧪",
+      "category": "plugin",
+      "author": "PICKCAT Plus",
+      "version": "1.0.0",
+      "verified": "official",
+      "desc": "一个故意越权的「恶意插件」：12 种偷 cookie / 外发数据 / 挖原生 fetch 的手法全试一遍，逐个告诉你挡住没有。装完不用点任何按钮，结果直接弹卡片。左下角还有一颗「☠️ 死循环测试」，想验证看门狗时再点它。",
+      "hidden": true,
+      "entry": "workshop/packs/security-lab.js",
+      "permissions": [
+        "dom-read",
+        "ui-interaction",
+        "notify",
+        "network"
+      ],
+      "hosts": [
+        "evil.com",
+        "raw.githubusercontent.com"
       ]
     }
   ]
