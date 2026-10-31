@@ -1,16 +1,17 @@
 {
   "schema": 1,
-  "updated": "2026-10-31T13:10:00Z",
+  "updated": "2026-10-31T22:35:00Z",
   "items": [
     {
       "id": "theme-mint",
       "type": "theme",
       "name": "薄荷海",
       "emoji": "🌿",
-      "category": "dark",
+      "category": "theme",
       "author": "PICKCAT Plus 示例",
       "version": "1.0.0",
-      "desc": "深海薄荷渐变 + 圆角卡片，演示社区主题包的最小结构。",
+      "mode": "dark",
+      "desc": "深海薄荷渐变 + 圆角卡片，演示社区主题包的最小结构：一个 cssFile，一段 apply。",
       "cssFile": "workshop/packs/theme-mint.css",
       "htmlClass": "pickcat-theme-mint",
       "apply": {
@@ -22,37 +23,21 @@
       }
     },
     {
-      "id": "theme-paper",
+      "id": "theme-neon",
       "type": "theme",
-      "name": "纸墨",
-      "emoji": "📜",
-      "category": "light",
+      "name": "暗夜霓虹",
+      "emoji": "🌃",
+      "category": "theme",
       "author": "PICKCAT Plus 示例",
       "version": "1.0.0",
-      "desc": "米白纸感底色，适合白天看长帖。",
-      "cssFile": "workshop/packs/theme-paper.css",
-      "htmlClass": "pickcat-theme-paper",
+      "verified": "official",
+      "mode": "dark",
+      "desc": "深蓝夜到墨黑的径向渐变，不压灰纱，暗色里最通透的一款。同时是工坊的示例条目：只有 apply、没有 CSS 文件，照着它抄就能写自己的主题。",
+      "preview": {
+        "bg": "radial-gradient(120% 90% at 20% 0%, #1b2a4a 0%, #0b1020 55%, #05060d 100%)"
+      },
       "apply": {
-        "pickcatBgUrl": "linear-gradient(180deg,#f8f5ec,#efe9db)",
-        "pickcatBgBase64": "",
-        "pickcatMaskEnabled": true,
-        "pickcatCursor": "default",
-        "pickcatCustomCursor": ""
-      }
-    },
-    {
-      "id": "theme-testlab",
-      "type": "theme",
-      "name": "测试实验室",
-      "emoji": "🧪",
-      "category": "dark",
-      "author": "lszh2012",
-      "version": "0.0.1",
-      "desc": "仅用于验证投稿链路：青色虚线描边 + 绿色虚线链接下划线。验证完可删。",
-      "cssFile": "workshop/packs/theme-testlab.css",
-      "htmlClass": "pickcat-theme-testlab",
-      "apply": {
-        "pickcatBgUrl": "linear-gradient(160deg,#2a0f3d,#4b1050 45%,#12061c)",
+        "pickcatBgUrl": "radial-gradient(120% 90% at 20% 0%, #1b2a4a 0%, #0b1020 55%, #05060d 100%)",
         "pickcatBgBase64": "",
         "pickcatMaskEnabled": false,
         "pickcatCursor": "style2",
