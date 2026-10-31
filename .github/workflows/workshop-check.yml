@@ -1,8 +1,5 @@
 name: 创意工坊检查
 
-# 什么时候跑：
-#   - 任何 PR（投稿基本都是 PR 过来）
-#   - 推送到 main 时也跑一遍，防止直接改文件漏检
 on:
   pull_request:
   push:
@@ -15,7 +12,8 @@ on:
       - 'background.js'
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
 
 jobs:
   validate:
@@ -48,3 +46,39 @@ jobs:
             echo "::error::扩展体积超过 2MB（现在 ${size} KB），商店审核会慢，请瘦身"
             exit 1
           fi
+
+  automerge:
+    name: 自动合并（仅限 workshop/ 内的改动）
+    needs: validate
+    if: github.event_name == 'pull_request' && !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 检查改动范围
+        id: scope
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NUM: ${{ github.event.pull_request.number }}
+        run: |
+          files=$(gh pr diff "$NUM" --name-only)
+          echo "改动文件："
+          echo "$files"
+          # tools/ 和 .github/ 一律不放行——那能改掉校验器本身，等于绕过所有闸门。
+          bad=$(echo "$files" | grep -v '^workshop/' || true)
+          if [ -n "$bad" ]; then
+            echo "skip=1" >> "$GITHUB_OUTPUT"
+            echo "::notice::有 workshop/ 以外的改动，跳过自动合并：$bad"
+          else
+            echo "skip=0" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 合并
+        if: steps.scope.outputs.skip == '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NUM: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr merge "$NUM" --squash --delete-branch \
+            --subject "chore(workshop): 合并投稿 PR #$NUM" \
+            --body "由 CI 自动合并：改动全部在 workshop/ 内，且清单校验通过。"
