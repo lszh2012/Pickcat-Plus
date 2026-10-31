@@ -210,39 +210,8 @@ html.pickcat-theme-halloween .posting-confetti-background .confetti-piece:nth-ch
     content: "👻";
 }
 
-/* ---- 点赞特效：南瓜/幽灵 飞散（由 decorateLikeButtons 触发） ---- */
-.pch-like-burst {
-    position: fixed;
-    z-index: 9999;
-    font-size: 20px;
-    line-height: 1;
-    pointer-events: none;
-    opacity: 0;
-    animation: pchLikeBurst 1.3s ease-out forwards;
-}
-@keyframes pchLikeBurst {
-    0%   { opacity: 0; transform: translate(0, 0) scale(.5) rotate(0deg); }
-    12%  { opacity: 1; }
-    100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(1.15) rotate(var(--rot)); }
-}
-
-/* ---- 角落蜘蛛网装饰 ---- */
-#pickcat-halloween-corners {
-    position: fixed; left: 0; right: 0; bottom: 0; height: 0;
-    pointer-events: none; z-index: 0;
-}
-#pickcat-halloween-corners svg {
-    position: fixed; bottom: 0;
-    overflow: hidden;
-}
-#pickcat-halloween-corners .pch-web-l { left: 0; }
-#pickcat-halloween-corners .pch-web-r { right: 0; }
-#pickcat-halloween-corners .pch-spider {
-    transform-box: fill-box;
-    transform-origin: 50% 0;
-    animation: pchSpiderSwing 7s ease-in-out infinite;
-}
-@keyframes pchSpiderSwing {
-    0%, 100% { transform: rotate(0deg); }
-    50%      { transform: rotate(9deg); }
-}
+/* ---- 说明 ----
+ * 原版还有「点赞飞散粒子」和「角落蛛网」两块，它们需要往页面插 DOM 才生效，
+ * 而主题包只能写 CSS、碰不到 DOM，所以这里不再保留相关样式（留着头也会是死代码）。
+ * 想要那两块的话，只能做成插件。
+ */

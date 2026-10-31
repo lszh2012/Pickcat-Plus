@@ -1,6 +1,6 @@
 # 🐾 PICKCAT Plus
 
-![Version](https://img.shields.io/badge/Version-v2.2.1-blue.svg)
+![Version](https://img.shields.io/badge/Version-v2.2.2-blue.svg)
 ![Manifest](https://img.shields.io/badge/Manifest-V3-purple.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 ![Build](https://img.shields.io/badge/build-none-lightgrey.svg)
@@ -84,14 +84,30 @@
 
 ---
 
-## 🤝 投稿（自动化到什么程度）
+## 🤝 投稿（真的全自动）
 
-社区投稿不需要懂 git：提 Issue 填表，或者提 PR。**格式类问题全部机检**——字段、路径、禁词、体积、sha256 指纹、CSS 红线，本地 `node tools/check.mjs` 和 GitHub CI 跑的是同一套。人只负责看「这段代码想干什么、权限要得合不合理」。
+社区投稿不需要懂 git、也不需要等我上线：提 Issue 填表就行。
+
+```
+你提交 Issue → 机器人几秒内跑完：解析 → 审计 → 写文件 → 更新清单 → 提交
+             → 成功：回执 + 自动关单    → 失败：回一张「哪里不合格 / 怎么改」的对照表
+改完直接编辑那条 Issue，会自动重跑，不用重新提。
+```
+
+- **主题（纯 CSS）= 真全自动。** 样式被逐条属性审计，只允许「画图」，改不了网页行为。
+- **插件（JS）= 自动上架 + 事后秒撤。** JS 没法事前证明无害，所以机器只挡明显越界的写法（读 DOM、`eval`、外链、白名单外联网……）。
+- **出了问题**：卡片上的 ⚑ 一按，就弹出一个填好的举报 Issue；维护者改一行 `workshop/revoked.json`，最多 10 分钟全量停用，已装的插件立刻停止运行并提示卸载。**这个开关在手机上就能用。**
+
+上线延迟：raw 源 5 分钟、客户端清单 10 分钟（想立刻看到，点工坊里的「🌐 同步」）。
+
+本地自检：
 
 ```bash
 node tools/new-plugin.mjs 我的插件 my-plugin   # 生成模板
 node tools/check.mjs --fix                    # 检查并自动补 sha256
 ```
+
+完整规则见 [DEVELOPER.md](DEVELOPER.md)。
 
 ## 📦 安装
 
@@ -148,6 +164,16 @@ v2.1.0 改了目录结构（新增 `sandbox.html` / `sandbox.js` / `workshop/`�
 ---
 
 ## 📝 更新日志
+
+### v2.2.2
+
+- 🤖 **投稿全自动了**：在 GitHub 提一条 Issue，机器人几秒内解析表单 → 审计代码 → 写文件 → 更新清单 → 自动提交，成功自动关单，失败回一张「哪里不合格 / 怎么改」的对照表；改完直接编辑原 Issue 就会重跑。
+- 🧪 **主题走 CSS 白名单审计**：逐条属性检查，只允许「画图」，改不了网页行为 —— 所以纯 CSS 主题可以机器判过就上架。
+- ⛔ **撤回表 `workshop/revoked.json`**：下架一个 id，最多 10 分钟全量生效，已装插件立刻停跑、卡片变「已下架」并显示原因。维护者在手机上改一行就能用。
+- ⚑ **举报按钮**：社区条目卡片上新增一个 ⚑，点开是一个预先填好的 GitHub Issue（带条目 id、作者、问题类型、浏览器版本），处理过程公开可追溯。
+- 🔁 PR 只要动的是 `workshop/` 里的文件、CI 全绿、非草稿，会自动 squash 合并；碰 `tools/`、`.github/`、`content.js` 的 PR 仍等人工。
+- 🧰 新增工具：`tools/css-audit.mjs`、`tools/publish.mjs`、`tools/issue-to-submission.mjs`、`tools/validate-revoked.mjs`。
+- 🧹 万圣夜惊魂清掉了两段需要插 DOM 的死代码（主题做不到那两块，做了也永远不会生效）。
 
 ### v2.2.1
 
@@ -218,7 +244,8 @@ PICKCAT-Plus/
 ├── icons/                            # 扩展图标
 ├── workshop/                         # 创意工坊
 │   ├── builtin.json                  # 内置清单（随扩展打包）
-│   ├── community.json                # 社区清单（投稿改这里）
+│   ├── community.json                # 社区清单（投稿自动改这里）
+│   ├── revoked.json                  # 撤回表（下架一个 id，10 分钟内全量生效）
 │   └── packs/
 │       ├── ai-summary.js             # AI 总结插件
 │       ├── security-lab.js           # 安全实验室（13 项越权自测）
@@ -226,13 +253,19 @@ PICKCAT-Plus/
 │       └── theme-mint.css            # 薄荷海（社区示例）
 ├── tools/
 │   ├── validate.mjs                  # 投稿校验器（和扩展内同一套规则）
+│   ├── css-audit.mjs                 # CSS 白名单审计（主题全自动上架的关键）
+│   ├── publish.mjs                   # 投稿 JSON → 写文件 + 更新清单
+│   ├── issue-to-submission.mjs       # Issue 表单 → 投稿 JSON
+│   ├── validate-revoked.mjs          # 撤回表校验
 │   ├── new-plugin.mjs                # 插件/主题模板生成器
 │   └── check.mjs                     # 一条命令跑完全部检查
-├── .github/workflows/workshop-check.yml  # CI：PR 自动跑校验
+├── .github/workflows/
+│   ├── auto-publish.yml              # Issue 投稿 → 自动上架
+│   └── workshop-check.yml            # PR 校验 + workshop/ 改动自动合并
 └── DEVELOPER.md                      # 开发者投稿指南
 ```
 
-想投稿？看 [DEVELOPER.md](DEVELOPER.md)：`node tools/new-plugin.mjs` 生成模板 → `node tools/check.mjs --fix` 全绿 → 提 Issue 或 PR。**
+想投稿？看 [DEVELOPER.md](DEVELOPER.md)：`node tools/new-plugin.mjs` 生成模板 → `node tools/check.mjs --fix` 全绿 → 提 Issue（几秒后自动上架）。
 
 
 没有构建步骤、没有 npm、没有依赖——`content.js` 一个文件就是全部逻辑，改完直接刷新扩展就能跑。

@@ -22,6 +22,7 @@ const step = (label, args) => {
 
 step('社区清单', ['tools/validate.mjs', 'workshop/community.json', ...fixArgs]);
 step('内置清单', ['tools/validate.mjs', 'workshop/builtin.json', ...fixArgs]);
+step('撤回表', ['tools/validate-revoked.mjs']);
 
 for (const f of ['content.js', 'sandbox.js', 'background.js']) {
   if (!existsSync(resolve(ROOT, f))) continue;

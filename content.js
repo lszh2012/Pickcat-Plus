@@ -299,7 +299,20 @@ function injectCreationShortcuts() {
             node.href = sc.url;
             node.target = '_blank';
             const img = node.querySelector('img');
-            if (img) { img.src = safeGetURL(sc.icon); img.style.objectFit = 'contain'; }
+            if (img) {
+                // 站点的图标是 <img srcset="/_ipx/s_28x28/… 1x, … 2x">。
+                // 只改 src 的话浏览器仍会按 srcset 取图 —— 结果要么显示 KittenN 的图标，
+                // 要么因为候选地址异常而整个空白（就是一个空的深色方块），所以先摘掉 srcset / sizes。
+                img.removeAttribute('srcset');
+                img.removeAttribute('sizes');
+                img.removeAttribute('loading');
+                img.src = safeGetURL(sc.icon);
+                img.style.objectFit = 'contain';
+                // 站点的 <span data-image-state> 只在图片加载完成后才恢复显示；克隆节点里这个状态
+                // 是跟着原生节点一起复制过来的，可能停在占位态，这里直接标记为已加载。
+                const shell = img.parentElement;
+                if (shell && shell.hasAttribute('data-image-state')) shell.setAttribute('data-image-state', 'loaded');
+            }
             const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
             let textNode;
             while ((textNode = walker.nextNode())) {
@@ -1073,6 +1086,8 @@ function createSettingsPanel() {
             .ws-chip.active { border-color: var(--primary); color: var(--primary); background: rgba(79,70,229,0.12); font-weight: 600; }
             .ws-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
             .ws-card { border: 1px solid var(--border); background: var(--bg-card); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+            .ws-card-revoked { opacity: .6; border-style: dashed; }
+            .ws-card-revoked .ws-name { text-decoration: line-through; }
             .ws-card-head { display: flex; align-items: center; gap: 6px; }
             .ws-emoji { font-size: 16px; line-height: 1; }
             .ws-name { font-size: 13px; font-weight: 600; color: var(--text-main); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
@@ -1302,7 +1317,7 @@ function createSettingsPanel() {
 
                     <div class="tab-content" id="tab-about">
                         <div class="row-card" style="flex-direction: column; align-items: flex-start; gap: 12px;">
-                            <h3 style="margin:0; color:var(--text-main);">PICKCAT Plus v2.2.1</h3>
+                            <h3 style="margin:0; color:var(--text-main);">PICKCAT Plus v2.2.2</h3>
                             <p style="margin:0; font-size:13px; color:var(--text-muted); line-height:1.6;">
                                 一个由社区开发者手搓的非官方 PICKCAT 增强插件。<br>
                                 旨在提供更顺手、更沉浸的社区体验。
@@ -1997,9 +2012,11 @@ const Workshop = (function () {
         return CDN_BASES.slice();
     }
     const CATALOG_CACHE_KEY = 'pickcat_ws_catalog_cache';
+    const REVOKED_CACHE_KEY = 'pickcat_ws_revoked';
     const CATALOG_TTL = 24 * 60 * 60 * 1000;
     const CATALOG_SOFT_TTL = 10 * 60 * 1000;
     const CATALOG_LOCAL_TTL = 30 * 60 * 1000;
+    const REPO_URL = 'https://github.com/lszh2012/Pickcat-Plus';
     const APPLY_KEYS = ['pickcatBgUrl', 'pickcatBgBase64', 'pickcatMaskEnabled', 'pickcatCursor', 'pickcatCustomCursor'];
     const ID_RE = /^[a-z0-9][a-z0-9._-]{1,48}$/;
     const PATH_RE = /^[A-Za-z0-9._\/-]+$/;
@@ -2007,6 +2024,10 @@ const Workshop = (function () {
     let remoteMerged = 0;
     let remoteSyncedAt = 0;
     let remoteUpdated = '';
+    // 撤回表：id -> { reason, at }。命中即「不再运行 / 不再允许安装」。
+    // 这是「维护者只有周末能上电脑」这个约束下唯一的保险：撤一条只要改一行 JSON。
+    let revoked = {};
+    let revokedAt = 0;
 
     function str(v, max) {
         return String(v == null ? '' : v).slice(0, max);
@@ -2208,6 +2229,89 @@ const Workshop = (function () {
         }
     }
 
+    /* ---------------- 撤回表（revoked） ---------------- */
+
+    // 维护者把条目 id 写进 workshop/revoked.json，客户端最多 10 分钟就能停用它。
+    // 这是「事前审核」的替代品：宁可事后秒撤，也不让作者等一个周末。
+    function sanitizeRevoked(json) {
+        const out = {};
+        const src = (json && json.items && typeof json.items === 'object') ? json.items : {};
+        Object.keys(src).slice(0, 500).forEach((id) => {
+            if (!ID_RE.test(id)) return;
+            const v = src[id] || {};
+            out[id] = { reason: str(v.reason, 120) || '维护者已下架该条目', at: str(v.at, 40) };
+        });
+        return out;
+    }
+
+    async function fetchRevoked() {
+        const bases = cdnBases();
+        for (let i = 0; i < bases.length; i++) {
+            try {
+                const json = await fetchJson(bases[i] + 'workshop/revoked.json', 6000);
+                return { items: sanitizeRevoked(json), base: bases[i] };
+            } catch (e) { /* 没这个文件、或者这个源挂了，试下一个 */ }
+        }
+        try {
+            const res = await fetch(chrome.runtime.getURL('workshop/revoked.json'), { cache: 'no-store' });
+            if (!res.ok) return null;
+            return { items: sanitizeRevoked(await res.json()), base: 'local' };
+        } catch (e) {
+            return null;
+        }
+    }
+
+    async function loadRevoked(force) {
+        if (!force) {
+            try {
+                const cached = (await get([REVOKED_CACHE_KEY]))[REVOKED_CACHE_KEY];
+                if (cached && cached.items) {
+                    revoked = cached.items;
+                    revokedAt = cached.at || 0;
+                }
+                if (cached && Date.now() - (cached.at || 0) < CATALOG_SOFT_TTL) return;
+            } catch (e) { /* 缓存坏了就当没有 */ }
+        }
+        const got = await fetchRevoked();
+        if (!got) return;   // 拉不到就沿用已有的，绝不因为网络问题把「下架」当成「恢复」
+        revoked = got.items;
+        revokedAt = Date.now();
+        try {
+            await set({ [REVOKED_CACHE_KEY]: { items: revoked, at: revokedAt } });
+        } catch (e) { /* ignore */ }
+        await enforceRevoked();
+    }
+
+    function isRevoked(id) {
+        return !!(revoked && revoked[id]);
+    }
+
+    // 已装的东西被撤回了：插件停用 + 清 UI，主题还原
+    async function enforceRevoked() {
+        if (!state.installed) return;
+        const hits = Object.keys(revoked || {}).filter((id) => state.installed[id]);
+        if (!hits.length) return;
+        let changed = false;
+        for (let i = 0; i < hits.length; i++) {
+            const id = hits[i];
+            const rec = state.installed[id] || {};
+            const info = revoked[id] || {};
+            if (rec.revoked) continue;
+            rec.revoked = true;
+            rec.revokeReason = info.reason || '维护者已下架该条目';
+            delete rec.enabled;
+            changed = true;
+            if (rec.type === 'plugin') {
+                removePluginUi(id);
+            }
+            toast('⛔「' + (rec.name || id) + '」已被下架：' + rec.revokeReason, 9000);
+        }
+        if (changed) {
+            await saveState();
+            render();
+        }
+    }
+
     function applyCommunity(payload, builtinIds) {
         const kept = catalog.filter((i) => i.source !== 'community');
         const items = (payload.items || []).filter((i) => i && i.id && !builtinIds[i.id]);
@@ -2240,8 +2344,10 @@ const Workshop = (function () {
             const payload = { at: Date.now(), base: got.base, updated: got.updated, local: got.local ? 1 : 0, items: items };
             applyCommunity(payload, builtin);
             await set({ [CATALOG_CACHE_KEY]: payload });
+            await loadRevoked(true);
             render();
-            console.info('[pickcat-workshop] 社区清单：源=' + got.base + ' updated=' + (got.updated || '-') + ' 条目=' + items.length);
+            console.info('[pickcat-workshop] 社区清单：源=' + got.base + ' updated=' + (got.updated || '-') + ' 条目=' + items.length +
+                ' 已下架=' + Object.keys(revoked).length);
             return 'ok';
         } catch (e) {
             console.info('[pickcat-workshop] 社区清单拉取失败：', e && e.message || e);
@@ -2270,6 +2376,7 @@ const Workshop = (function () {
             if (cached && Array.isArray(cached.items) && Date.now() - (cached.at || 0) < ttl) {
                 const stamped = cached.items.map((i) => Object.assign({ at: cached.at }, i));
                 applyCommunity({ items: stamped, at: cached.at }, builtinIds);
+                loadRevoked(false);   // 撤回表先读缓存，过期了它自己会去拉
                 if (Date.now() - (cached.at || 0) > CATALOG_SOFT_TTL) refreshCommunity(builtinIds);
                 return;
             }
@@ -2348,16 +2455,23 @@ const Workshop = (function () {
     function cardHtml(item) {
         const inst = isInstalled(item.id);
         const rec = state.installed[item.id] || {};
+        const rv = revoked[item.id] || null;
         // 没有 preview.bg 时，用主题自带的渐变直接画缩略图（零额外请求）
         const gradBg = /gradient\(/i.test(String((item.apply || {}).pickcatBgUrl || '')) ? item.apply.pickcatBgUrl : '';
         const previewBg = (item.preview && item.preview.bg) || gradBg;
         const preview = previewBg ? `<div class="ws-preview" style="background:${esc(previewBg)}"></div>` : '';
+        const reportBtn = (item.source === 'community' && !rv)
+            ? `<button class="ws-btn" data-act="report" data-id="${esc(item.id)}" title="内容有问题？点这里去仓库举报（会打开一个预先填好的 Issue）">⚑</button>`
+            : '';
 
         let actions = '';
-        if (item.__broken) {
+        if (rv) {
+            actions = `<button class="ws-btn" disabled title="维护者已下架该条目：${esc(rv.reason)}">⛔ 已下架</button>` +
+                (inst ? `<button class="ws-btn danger" data-act="uninstall" data-id="${esc(item.id)}">卸载</button>` : '');
+        } else if (item.__broken) {
             actions = `<button class="ws-btn" disabled title="这个条目的文件已经被作者删除或改名，装不了；可以等作者修复或让作者重新投稿">⚠️ 资源缺失</button>`;
         } else if (!inst) {
-            actions = `<button class="ws-btn primary" data-act="install" data-id="${esc(item.id)}">安装</button>`;
+            actions = `<button class="ws-btn primary" data-act="install" data-id="${esc(item.id)}">安装</button>` + reportBtn;
         } else if (item.type === 'theme') {
             actions = `<button class="ws-btn danger" data-act="uninstall" data-id="${esc(item.id)}">卸载</button>`;
         } else {
@@ -2372,6 +2486,7 @@ const Workshop = (function () {
                 actions =
                     `<button class="ws-btn" data-act="toggle" data-id="${esc(item.id)}">${on ? '停用' : '启用'}</button>` +
                     (item.settings ? `<button class="ws-btn" data-act="gear" data-id="${esc(item.id)}">⚙</button>` : '') +
+                    reportBtn +
                     `<button class="ws-btn danger" data-act="uninstall" data-id="${esc(item.id)}">卸载</button>`;
             }
         }
@@ -2407,15 +2522,15 @@ const Workshop = (function () {
                 `</div>`;
         }
 
-        return `<div class="ws-card" data-card="${esc(item.id)}">
+        return `<div class="ws-card${rv ? ' ws-card-revoked' : ''}" data-card="${esc(item.id)}">
             <div class="ws-card-head">
                 <span class="ws-emoji">${esc(item.emoji || '📦')}</span>
                 <span class="ws-name">${esc(item.name)}</span>
-                ${badgeOf(item)}
+                ${rv ? '<span class="ws-badge warn">⛔ 已下架</span>' : badgeOf(item)}
             </div>
             <div class="ws-author">by ${esc(item.author || '匿名')}</div>
             ${preview}
-            <div class="ws-desc">${esc(item.desc || '')}</div>
+            <div class="ws-desc">${esc(item.desc || '')}${rv ? '<br><strong>下架原因：' + esc(rv.reason) + '</strong>' : ''}</div>
             <div class="ws-tags">${permsTags(item)}${modeTag(item)}${claimTags(item)}</div>
             <div class="ws-actions">${actions}</div>
             ${settings}
@@ -2989,6 +3104,39 @@ const Workshop = (function () {
         setTimeout(function () { runPlugins(); }, 300);
     }
 
+    // 举报：不搞自己的服务器，直接开一个预填好的 GitHub Issue。
+    // 好处是「举报」这件事本身也是公开、可追溯的，谁都能看见。
+    function reportItem(item) {
+        const title = '[举报] ' + item.id;
+        const body = [
+            '### 举报的条目',
+            '',
+            '`' + item.id + '`　（' + (item.name || '') + ' · ' + (item.type === 'theme' ? '主题' : '插件') + ' · by ' + (item.author || '匿名') + '）',
+            '',
+            '### 问题类型',
+            '',
+            '- [ ] 看起来在骗人（诱导输入密码 / Key 等）',
+            '- [ ] 页面显示异常 / 挡不住内容',
+            '- [ ] 内容不适合出现在这里',
+            '- [ ] 其他',
+            '',
+            '### 具体描述',
+            '',
+            '（在这里写清楚你看到了什么；有截图的话可以直接把图拖进来）',
+            '',
+            '### 你的浏览器',
+            '',
+            navigator.userAgent
+        ].join('\n');
+        const url = REPO_URL + '/issues/new?labels=report&title=' + encodeURIComponent(title) + '&body=' + encodeURIComponent(body);
+        try {
+            window.open(url, '_blank', 'noopener');
+        } catch (e) {
+            copyText(url);
+            toast('已复制举报链接，粘贴到浏览器打开就行');
+        }
+    }
+
     const NEED_PERM = {
         getPostContent: 'dom-read',
         addInteractionButton: 'ui-interaction',
@@ -3286,6 +3434,7 @@ const Workshop = (function () {
         if (state.safeMode) return;
         const targets = Object.keys(state.installed).filter((id) => {
             const rec = state.installed[id];
+            if (rec.revoked || isRevoked(id)) return false;   // 被下架的插件永不再启动
             return rec.type === 'plugin' && rec.enabled !== false;
         });
         if (!targets.length) return;
@@ -3385,6 +3534,7 @@ const Workshop = (function () {
             else if (act === 'toggle') togglePlugin(id);
             else if (act === 'reconfirm' && item) reconfirm(item);
             else if (act === 'revive') revivePlugin(id);
+            else if (act === 'report' && item) reportItem(item);
             else if (act === 'gear') {
                 const box = els.grid.querySelector(`[data-settings="${CSS.escape(id)}"]`);
                 if (box) box.classList.toggle('open');
