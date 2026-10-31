@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "updated": "2026-10-31T22:20:00Z",
+  "items": [
+    {
+      "id": "theme-mint",
+      "type": "theme",
+      "name": "薄荷海",
+      "emoji": "🌿",
+      "category": "theme",
+      "author": "PICKCAT Plus 示例",
+      "version": "1.0.0",
+      "mode": "dark",
+      "desc": "深海薄荷渐变 + 圆角卡片，演示社区主题包的最小结构：一个 cssFile，一段 apply。",
+      "cssFile": "workshop/packs/theme-mint.css",
+      "htmlClass": "pickcat-theme-mint",
+      "apply": {
+        "pickcatBgUrl": "linear-gradient(160deg,#0b3b3c,#0e6b63 45%,#082529)",
+        "pickcatBgBase64": "",
+        "pickcatMaskEnabled": false,
+        "pickcatCursor": "style3",
+        "pickcatCustomCursor": ""
+      }
+    }
+  ]
+}
