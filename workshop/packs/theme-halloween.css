@@ -1,3 +1,9 @@
+/* ============================================================
+   万圣夜 · Halloween Night（社区修补版）
+   纯 CSS 主题：深紫夜色 + 南瓜橙描边 + 明月蝙蝠幽灵剪影
+   全部选择器挂在 html.pickcat-theme-halloween 下，卸载即整体失效
+   ============================================================ */
+
 html.pickcat-theme-halloween,
 html.pickcat-theme-halloween.dark {
     color-scheme: dark;
@@ -66,7 +72,7 @@ html.pickcat-theme-halloween body {
     color: var(--ui-text);
 }
 
-/* 页面根容器透明化，露出 body 上的明月与剪影背景（html 的底色也放开） */
+/* 页面根容器透明化，露出 body 上的明月与剪影背景 */
 html.pickcat-theme-halloween,
 html.pickcat-theme-halloween #__nuxt,
 html.pickcat-theme-halloween #__next,
@@ -114,7 +120,7 @@ html.pickcat-theme-halloween article::before {
     filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .45));
 }
 
-/* ---- 帖子标签：紫药丸（仅帖子卡片内，自适应高度，圆角正好包住文字） ---- */
+/* ---- 帖子标签：紫药丸（自适应高度，圆角正好包住文字） ---- */
 html.pickcat-theme-halloween article a[href*="/forum/category/"] {
     display: inline-flex !important;
     align-items: center;
@@ -178,8 +184,6 @@ html.pickcat-theme-halloween input[type="search"] {
 }
 html.pickcat-theme-halloween input[placeholder*="搜索"]::placeholder { color: #9e7fc6 !important; }
 
-/* ---- 选项卡（关注/推荐/最新）活跃项用主题色自动呈现 ---- */
-
 /* ---- 滚动条 ---- */
 html.pickcat-theme-halloween *::-webkit-scrollbar { width: 10px; height: 10px; }
 html.pickcat-theme-halloween *::-webkit-scrollbar-thumb { background: #4a2a73; border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
@@ -209,9 +213,3 @@ html.pickcat-theme-halloween .posting-confetti-background .confetti-piece::befor
 html.pickcat-theme-halloween .posting-confetti-background .confetti-piece:nth-child(odd)::before {
     content: "👻";
 }
-
-/* ---- 说明 ----
- * 原版还有「点赞飞散粒子」和「角落蛛网」两块，它们需要往页面插 DOM 才生效，
- * 而主题包只能写 CSS、碰不到 DOM，所以这里不再保留相关样式（留着头也会是死代码）。
- * 想要那两块的话，只能做成插件。
- */

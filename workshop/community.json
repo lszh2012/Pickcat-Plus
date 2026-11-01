@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-11-01T14:24:18Z",
+  "updated": "2026-11-01T14:50:59Z",
   "items": [
     {
       "id": "pickcat-cat-pet",
@@ -19,6 +19,24 @@
       ],
       "hosts": [],
       "sha256": "d9e88024fa87d82fc072bd722423fb9f80617b0f93625d2d4c3a58e4e6001067"
+    },
+    {
+      "id": "theme-halloween",
+      "type": "theme",
+      "name": "万圣夜",
+      "emoji": "🎨",
+      "category": "theme",
+      "author": "Helencpu",
+      "version": "1.0.0",
+      "verified": "unverified",
+      "desc": "🎃 万圣夜主题（社区修补版）：深紫夜色 + 南瓜橙描边 + 明月/蝙蝠/幽灵剪影背景，帖子卡右上角小南瓜、板块卡右下角小幽灵，分享按钮彩带换成南瓜幽灵。本作为基于原 PICKCAT Plus 万圣节改造的社区移植修补版，纯 CSS 无脚本。",
+      "cssFile": "workshop/packs/theme-halloween.css",
+      "htmlClass": "pickcat-theme-halloween",
+      "apply": {
+        "pickcatBgUrl": "radial-gradient(1100px 620px at 82% -12%, #1a0b2e, #12071e 70%)",
+        "pickcatMaskEnabled": true,
+        "pickcatCursor": "style6"
+      }
     },
     {
       "id": "theme-mint",
