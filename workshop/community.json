@@ -1,7 +1,25 @@
 {
   "schema": 1,
-  "updated": "2026-11-1T03:00:00Z",
+  "updated": "2026-11-01T14:24:18Z",
   "items": [
+    {
+      "id": "pickcat-cat-pet",
+      "type": "plugin",
+      "name": "PICKCAT 小桌宠",
+      "emoji": "🧩",
+      "category": "enhance",
+      "author": "Helencpu",
+      "version": "1.0.0",
+      "verified": "unverified",
+      "desc": "一只会陪你逛帖子的小红猫，点一下就有惊喜。",
+      "entry": "workshop/packs/pickcat-cat-pet.js",
+      "permissions": [
+        "ui-interaction",
+        "storage"
+      ],
+      "hosts": [],
+      "sha256": "d9e88024fa87d82fc072bd722423fb9f80617b0f93625d2d4c3a58e4e6001067"
+    },
     {
       "id": "theme-mint",
       "type": "theme",
