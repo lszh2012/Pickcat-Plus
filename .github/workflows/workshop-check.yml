@@ -1,5 +1,9 @@
 name: 创意工坊检查
 
+# 什么时候跑：
+#   - 任何 PR（投稿基本都是 PR 过来）→ 检查通过且只动了 workshop/ 就自动合并
+#   - 推送到 main 时也跑一遍，防止直接改文件漏检
+
 on:
   pull_request:
   push:
@@ -64,6 +68,7 @@ jobs:
           files=$(gh pr diff "$NUM" --name-only)
           echo "改动文件："
           echo "$files"
+          # 只允许 workshop/ 内的改动自动合并。
           # tools/ 和 .github/ 一律不放行——那能改掉校验器本身，等于绕过所有闸门。
           bad=$(echo "$files" | grep -v '^workshop/' || true)
           if [ -n "$bad" ]; then
