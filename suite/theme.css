@@ -1,0 +1,244 @@
+/* ============================================================
+ * PICKCAT Plus · 主题套装 / WinUI
+ * theme.css —— Windows 11 Fluent 观感层
+ * 全部选择器以 html.pickcat-suite-winui 开头，关闭即完全失效。
+ * ============================================================ */
+
+html.pickcat-suite-winui {
+    /* ---- Fluent 浅色 token（对齐概念设计稿） ---- */
+    --ui-bg: #eef5f9;
+    --ui-bg-shell: rgba(255, 255, 255, 0.72);
+    --ui-bg-muted: #f3f7fa;
+    --ui-bg-inset: #f7fafc;
+    --ui-bg-elevated: #ffffff;
+    --ui-bg-input: #ffffff;
+    --ui-border: #e2e8ec;
+    --ui-border-strong: #d2dde4;
+    --ui-text: #1b1b1b;
+    --ui-text-muted: #6b6b6b;
+    --ui-text-dimmed: #8a8a8a;
+    --ui-primary: #2e7d9b;
+    --ui-primary-hover: #266a84;
+    --ui-radius: 8px;
+    --ui-card-translucent: rgba(255, 255, 255, 0.82);
+    --ui-card-interactive: rgba(255, 255, 255, 0.96);
+
+    --radius-xl: 8px;
+    --radius-lg: 8px;
+    --radius-md: 6px;
+    --radius-sm: 4px;
+
+    color-scheme: light only;
+    background-color: #edf4f8 !important;
+    background-image:
+        radial-gradient(1100px 520px at 12% -8%, rgba(206, 231, 243, 0.9) 0%, rgba(206, 231, 243, 0) 62%),
+        radial-gradient(900px 480px at 96% -4%, rgba(246, 235, 225, 0.85) 0%, rgba(246, 235, 225, 0) 58%),
+        radial-gradient(900px 700px at 50% 110%, rgba(219, 238, 247, 0.7) 0%, rgba(219, 238, 247, 0) 60%),
+        linear-gradient(158deg, #e9f2f7 0%, #fbfcfd 52%, #f6fbfd 100%) !important;
+    background-attachment: fixed !important;
+    font-family: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, -apple-system, sans-serif !important;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+}
+
+html.pickcat-suite-winui body,
+html.pickcat-suite-winui #__nuxt,
+html.pickcat-suite-winui #__nuxt > .v3scroll-box,
+html.pickcat-suite-winui .v3-scroll-body,
+html.pickcat-suite-winui .v3-scroll-content {
+    background: transparent !important;
+}
+
+html.pickcat-suite-winui .v3-scroll-body {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(38, 78, 98, 0.28) transparent;
+}
+
+html.pickcat-suite-winui ::selection {
+    background: rgba(46, 125, 155, 0.22);
+}
+
+/* ---------------- 顶栏 ---------------- */
+html.pickcat-suite-winui header[role="banner"] {
+    height: 64px !important;
+    padding-left: 24px !important;
+    padding-right: 20px !important;
+    background: rgba(255, 255, 255, 0.62) !important;
+    border-bottom: 1px solid rgba(22, 52, 68, 0.06);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.7) inset;
+    backdrop-filter: blur(30px) saturate(1.45);
+    -webkit-backdrop-filter: blur(30px) saturate(1.45);
+}
+
+html.pickcat-suite-winui header[role="banner"] nav[aria-label="内容导航"] {
+    display: none !important;
+}
+
+/* 套装自己锁定浅色，隐藏站点主题切换，避免两套主题打架 */
+html.pickcat-suite-winui header[role="banner"] button[aria-label="选择主题"] {
+    display: none !important;
+}
+
+html.pickcat-suite-winui header[role="banner"] > a[aria-label="PICKCAT 首页"] span {
+    width: 198px !important;
+    height: 40px !important;
+}
+
+html.pickcat-suite-winui header[role="banner"] > div.ml-auto {
+    gap: 10px !important;
+}
+
+html.pickcat-suite-winui header[role="banner"] form[role="search"] {
+    width: min(360px, 30vw) !important;
+}
+
+html.pickcat-suite-winui header[role="banner"] form[role="search"] input {
+    height: 38px !important;
+    border-radius: 8px !important;
+    border: 1px solid rgba(22, 52, 68, 0.1) !important;
+    background: rgba(255, 255, 255, 0.76) !important;
+    box-shadow: 0 1px 1px rgba(22, 52, 68, 0.03);
+    color: var(--ui-text) !important;
+    font-size: 13.5px !important;
+    transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+html.pickcat-suite-winui header[role="banner"] form[role="search"] input:hover {
+    background: rgba(255, 255, 255, 0.92) !important;
+}
+
+html.pickcat-suite-winui header[role="banner"] form[role="search"] input:focus {
+    background: #fff !important;
+    border-color: rgba(46, 125, 155, 0.65) !important;
+    box-shadow: 0 0 0 2px rgba(46, 125, 155, 0.14) !important;
+}
+
+html.pickcat-suite-winui header[role="banner"] button {
+    border-radius: 6px !important;
+    transition: background 0.15s ease;
+}
+
+html.pickcat-suite-winui header[role="banner"] button:hover {
+    background: rgba(22, 52, 68, 0.06) !important;
+}
+
+html.pickcat-suite-winui header[role="banner"] a[href="/login"] {
+    border-radius: 6px !important;
+    padding: 6px 12px !important;
+    font-weight: 500 !important;
+    color: var(--ui-text) !important;
+}
+
+html.pickcat-suite-winui header[role="banner"] a[href="/login"]:hover {
+    background: rgba(22, 52, 68, 0.06) !important;
+}
+
+html.pickcat-suite-winui header[role="banner"] a[href="/register"] {
+    border-radius: 6px !important;
+    padding: 6px 16px !important;
+    background: var(--ui-primary) !important;
+    color: #fff !important;
+    font-weight: 600 !important;
+    box-shadow: 0 1px 2px rgba(22, 52, 68, 0.16) !important;
+}
+
+html.pickcat-suite-winui header[role="banner"] a[href="/register"]:hover {
+    background: var(--ui-primary-hover) !important;
+}
+
+/* ---------------- 主区域 ---------------- */
+html.pickcat-suite-winui main {
+    padding-top: 30px !important;
+}
+
+html.pickcat-suite-winui main h1 {
+    font-weight: 600 !important;
+    letter-spacing: -0.02em;
+    color: var(--ui-text);
+}
+
+html.pickcat-suite-winui main h2 {
+    font-weight: 600 !important;
+    letter-spacing: -0.01em;
+}
+
+/* 信息流 / 分类 / 帖子列表卡片 */
+html.pickcat-suite-winui main article[class*="bg-(--ui-card-translucent)"],
+html.pickcat-suite-winui main a[class*="bg-(--ui-card-translucent)"] {
+    background: var(--ui-card-translucent) !important;
+    border: 1px solid rgba(22, 52, 68, 0.07);
+    border-radius: var(--ui-radius) !important;
+    box-shadow: 0 1px 2px rgba(22, 52, 68, 0.04);
+    transition: background 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+html.pickcat-suite-winui main article[class*="bg-(--ui-card-translucent)"]:hover,
+html.pickcat-suite-winui main a[class*="bg-(--ui-card-translucent)"]:hover {
+    background: var(--ui-card-interactive) !important;
+    box-shadow: 0 8px 24px rgba(22, 52, 68, 0.1);
+}
+
+/* 作品封面卡：只加悬浮阴影，不裁切图片 */
+html.pickcat-suite-winui main article.group\/work-featured,
+html.pickcat-suite-winui main article[class*="work-card"] {
+    transition: box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+html.pickcat-suite-winui main article.group\/work-featured:hover,
+html.pickcat-suite-winui main article[class*="work-card"]:hover {
+    box-shadow: 0 10px 28px rgba(22, 52, 68, 0.14);
+    transform: translateY(-2px);
+}
+
+/* 通用控件 */
+html.pickcat-suite-winui main button {
+    border-radius: 6px;
+}
+
+html.pickcat-suite-winui main input[type="text"],
+html.pickcat-suite-winui main input[type="search"],
+html.pickcat-suite-winui main textarea {
+    border-radius: 6px;
+}
+
+html.pickcat-suite-winui main a[class*="text-primary"],
+html.pickcat-suite-winui main .text-primary {
+    color: var(--ui-primary);
+}
+
+/* ---------------- 滚动条 ---------------- */
+html.pickcat-suite-winui .v3-scroll-body::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+html.pickcat-suite-winui .v3-scroll-body::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+html.pickcat-suite-winui .v3-scroll-body::-webkit-scrollbar-thumb {
+    background: rgba(38, 78, 98, 0.24);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 999px;
+}
+
+html.pickcat-suite-winui .v3-scroll-body::-webkit-scrollbar-thumb:hover {
+    background: rgba(38, 78, 98, 0.4);
+    background-clip: content-box;
+}
+
+/* ---------------- 小屏：套装只做桌面端，移动端保持原样 ---------------- */
+@media (max-width: 1023px) {
+    html.pickcat-suite-winui .pcs-rail {
+        display: none !important;
+    }
+
+    html.pickcat-suite-winui .v3-scroll-content {
+        padding-left: 0 !important;
+    }
+
+    html.pickcat-suite-winui main {
+        padding-top: 16px !important;
+    }
+}

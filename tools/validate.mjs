@@ -22,6 +22,8 @@ const target = positional[0] || 'workshop/community.json';
 const fixes = {};                                          // id -> 正确的 sha256
 
 const ID_RE = /^[a-z0-9][a-z0-9._-]{1,48}$/;
+// 官方图床（只存引用不存图，仓库里不放图片）
+const IMG_HOST_RE = /^https:\/\/pickcat\.dao3\.fun\/api\/v1\/files\/[A-Za-z0-9_-]{8,64}$/;
 const PATH_RE = /^[A-Za-z0-9._/-]+$/;
 const HOST_RE = /^(\*\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i;
 const PERMS = ['dom-read', 'ui-interaction', 'notify', 'clipboard-write', 'storage', 'network'];
@@ -107,6 +109,25 @@ json.items.forEach((raw, i) => {
     warn('verified 会被强制改成 unverified，社区条目不能自称官方/已审核');
   }
 
+  // 图标：emoji / 官方图床直链 / 小 data URI
+  if (raw.icon !== undefined) {
+    const ic = typeof raw.icon === 'string' ? raw.icon.trim() : '';
+    if (!ic) fail('icon 是空字符串，删掉这个字段就行');
+    else if (ic.length <= 4) { /* emoji，放行 */ }
+    else if (/^data:image\/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(ic)) {
+      if (ic.length > 26000) fail('icon 的 data URI 超过 26KB，请压缩或用官方图床直链');
+    } else if (IMG_HOST_RE.test(ic)) {
+      /* 官方图床直链，放行 */
+    } else {
+      fail('icon 只能是 emoji、data:image/*（≤26KB）或 https://pickcat.dao3.fun/api/v1/files/<id> 的直链');
+    }
+  }
+  if (raw.preview && typeof raw.preview === 'object' && raw.preview.image !== undefined) {
+    if (!IMG_HOST_RE.test(String(raw.preview.image).trim())) {
+      fail('preview.image 必须是官方图床直链（' + 'https://pickcat.dao3.fun/api/v1/files/<id>）');
+    }
+  }
+
   if (raw.mode !== undefined && !['dark', 'light', 'any'].includes(raw.mode)) {
     fail("mode 只能是 'dark' / 'light' / 'any'");
   }
@@ -141,7 +162,7 @@ json.items.forEach((raw, i) => {
       fail('pickcatCursor 只能是：' + CURSORS.join(' / '));
     }
     if (apply.pickcatBgUrl && apply.pickcatBgUrl.length > 20000) fail('pickcatBgUrl 太长');
-    if (!IS_BUILTIN && !raw.cssFile && !raw.css && !Object.keys(apply).length) return fail('主题至少要给 cssFile / css / apply 其中一样');
+    if (!IS_BUILTIN && !raw.cssFile && !raw.css && !raw.decor && !Object.keys(apply).length) return fail('主题至少要给 cssFile / css / decor / apply 其中一样');
 
     if (raw.cssFile) {
       if (!PATH_RE.test(raw.cssFile)) return fail('cssFile 只能是仓库内的相对路径');
@@ -155,6 +176,28 @@ json.items.forEach((raw, i) => {
       else ok(`${raw.cssFile}（${(statSync(p).size / 1024).toFixed(1)} KB）样式检查通过`);
     }
     if (raw.htmlClass && !/^[A-Za-z0-9_-]{1,60}$/.test(raw.htmlClass)) fail('htmlClass 只能是字母数字_-');
+    // 装饰件：主题不能塞节点，只能从能力目录里挑零件
+    if (raw.decor !== undefined) {
+      const DECOR_TYPES = ['corner-web'];
+      if (!Array.isArray(raw.decor)) fail('decor 必须是数组，例如 ["corner-web"]');
+      else {
+        if (raw.decor.length > 4) fail('decor 最多 4 项');
+        const seen = new Set();
+        raw.decor.forEach((d, i) => {
+          const at = 'decor[' + i + ']';
+          const t = typeof d === 'string' ? d : (d && typeof d === 'object' ? d.type : null);
+          if (!t) return fail(at + ' 必须是字符串或 { type: ... }');
+          if (DECOR_TYPES.indexOf(t) < 0) return fail(at + ' 未知装饰件：' + t + '（可用：' + DECOR_TYPES.join(' / ') + '）');
+          if (seen.has(t)) fail(at + ' 重复声明：' + t);
+          seen.add(t);
+          if (typeof d === 'object') {
+            if (d.opacity !== undefined && (typeof d.opacity !== 'number' || d.opacity < 0 || d.opacity > 1)) fail(at + '.opacity 必须是 0~1 的数字');
+            if (d.color !== undefined && !/^[#a-zA-Z0-9(),.%\s]{3,40}$/.test(String(d.color))) fail(at + '.color 只能写颜色值（如 rgba(210,182,250,.7)）');
+          }
+        });
+        if (!errors) ok('decor ' + raw.decor.length + ' 项（' + [...seen].join(' / ') + '）');
+      }
+    }
   } else {
     const perms = raw.permissions || [];
     if (!Array.isArray(perms)) return fail('permissions 必须是数组');

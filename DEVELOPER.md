@@ -69,6 +69,7 @@ workshop/
 | `version` | ✅ | 语义化版本，内容改了要升 |
 | `cssFile` | ✅ | 仓库内相对路径，必须以 `.css` 结尾 |
 | `htmlClass` | 建议 | 注入时加到 `<html>` 上的类名，只能字母数字 `_-` |
+| `decor` | 可选 | 装饰件，见 2.6。**主题不能往页面里插节点，只能用这里声明的零件** |
 | `apply` | ✅ | 要写入的设置项，见下表 |
 | `mode` | 建议 | `"dark"` / `"light"` / `"any"`（默认）。声明这套皮肤更适合哪种配色；和用户当前模式不搭时，卡片上会挂一个提醒，用户切换模式时最多提示一次。**不阻止安装**。 |
 | `claims` | 可选 | 你要「接管」的设置项，见 2.5 |
@@ -110,7 +111,7 @@ workshop/
 - **用户原来的值不会被覆盖**。扩展只存一份「租约」，读取配置时在内存里临时套用你的值；卸载/禁用/点「释放」立刻恢复用户自己的设置。
 - 单条最多 **5 项**；同一个键最多被 **3 个**插件同时接管（后装的优先）。
 - 用户随时可以在设置面板里看到「🔒 由「X」接管 · 点此释放」，所以 `label` 和 `reason` 要写清楚，别写「设置」这种废话。
-- 开了「安全模式」时所有租约一次性释放。
+- 开了「🛑 应急逃生」时所有租约一次性释放（插件全停、主题皮肤摘掉，安装状态保留）。
 - 滥用（把 9 项全锁上）会被打回改。
 
 ### 2.4 CSS 规则（会被自动审计，不合格直接拒）
@@ -130,11 +131,93 @@ html.pickcat-theme-mint article {
 ### 2.5 主题能做 / 不能做
 | 能做 | 做不到 |
 | --- | --- |
-| 配色、渐变背景、圆角、边框、阴影、字体、滚动条、选中色 | 新增 DOM（比如左侧图标栏、横幅、悬浮预览卡） |
+| 配色、渐变背景、圆角、边框、阴影、字体、滚动条、选中色 | 新增任意 DOM（左侧图标栏、横幅、悬浮预览卡……） |
 | 覆盖站点 CSS 变量（`--ui-*` 一类） | 改路由、改页面结构、插入按钮 |
 | 隐藏/显示站内已有元素 | 读取或请求数据 |
+| 使用 `decor` 里已实现的装饰件（见 2.6） | 自带 SVG / 图片 / 自定义装饰节点 |
 
 想做后者，得写**插件**。
+
+### 2.6 装饰件（`decor`）
+
+主题是纯数据，不能往页面里塞节点 —— 但「四角蛛网」这种观感又确实需要节点。所以扩展自己实现了一批**装饰件**，主题只能挑零件、调参数：
+
+```json
+"decor": [
+  "corner-web"
+]
+```
+
+带参数的写法：
+
+```json
+"decor": [
+  { "type": "corner-web", "color": "rgba(210,182,250,0.72)", "opacity": 0.9, "emoji": false }
+]
+```
+
+| 装饰件 | 效果 | 可调参数 |
+| --- | --- | --- |
+| `corner-web` | 左下 / 右下两张蛛网，各挂一只会轻轻摇晃的蜘蛛（默认带 🎃👻🍬 三个小吊牌） | `color`（网的颜色，≤40 字）、`opacity`（0–1）、`emoji`（false 关掉吊牌） |
+
+规矩：
+
+- 最多 4 项，同一种不能重复；
+- 写未知类型会**校验失败**（不是静默忽略），别拼错；
+- 装饰层是 `position:fixed` + `pointer-events:none`，不挡点击；
+- 想加新的装饰件（雪花、樱花、点赞粒子……）就提 Issue 说清楚画什么，实现一次之后所有主题都能用。
+
+### 2.6.1 图标与预览图（icon / preview.image）
+
+图标三种写法，任选其一：
+
+```json
+"icon": "🎃"
+"icon": "https://pickcat.dao3.fun/api/v1/files/01a1xxxx-xxxx-7xxx-xxxx-xxxxxxxxxxxx"
+"icon": "data:image/png;base64,iVBORw0KGgo..."
+```
+
+| 写法 | 上限 | 说明 |
+| --- | --- | --- |
+| emoji | 4 个字符 | 最省事，永远能显示 |
+| 官方图床直链 | 320 字符 | **只存引用不存图**：仓库里不放图片文件 |
+| data URI | 26KB | 小图内联，适合线条图标 |
+
+- 图床地址必须形如 `https://pickcat.dao3.fun/api/v1/files/<uuid>`，客户端与校验器都按这个前缀卡死。
+- 图片读取失败时会自动回落成 🖼，不会留破图占位。
+- 详情页配图用 `"preview": { "image": "<同样的图床直链>" }`；也可以继续用 `preview.bg` 的 CSS 渐变（零网络）。
+
+### 2.7 整页背景与沙盒等级
+
+**`pageBackground`（布尔，可选）**
+
+如果你的主题在 CSS 里自己画了整页背景（比如 `html.pickcat-theme-xxx body { background-image: … }`），请写上 `"pageBackground": true`。
+
+原因：站点内容外面套了一层不透明容器，它的类名**会变**（我们亲眼见过它从 `min-h-dvh bg-muted` 改成 `min-h-[var(--page-scroll-height,100dvh)]`）。写了这个字段，扩展就会在运行时自己找出「盖住页面的那一层」并让它透明，而不是靠你在 CSS 里赌类名。
+
+```json
+{
+  "id": "theme-example",
+  "type": "theme",
+  "cssFile": "workshop/packs/theme-example.css",
+  "htmlClass": "pickcat-theme-example",
+  "pageBackground": true
+}
+```
+
+**`tier`（可省略，通常不用写）**
+
+市场里每张卡会显示 🟢 安全 / 🟡 均衡 / 🔴 自由，这个等级是**机器按你声明的能力算出来的**，不是你自己填的：
+
+| 你的包 | 推导结果 |
+| --- | --- |
+| 主题（CSS / decor / apply） | 🟢 安全 |
+| 插件声明了 `dom-read` / `ui-interaction` / `network` | 🟡 均衡 |
+| 插件声明了 `dom-global`（改写整页） | 🔴 自由 |
+
+`tier` 字段只能把自己**降得更严格**（比如你只有 `ui-interaction` 却想标成安全档），**不能**宣称自己比推导结果更安全 —— 写了也会被取更宽松的那个。
+
+> ⚠️ `dom-write`（锚点内改动）和 `dom-global`（改写整页）这两个能力**当前还没实装**，先列在权限表里只是为了让清单能提前声明、卡片能如实显示。真正开放时会单独发公告。
 
 ---
 
@@ -244,6 +327,7 @@ PickcatPlus.copy(text)           // 需要 clipboard-write
 PickcatPlus.storage.get(key) / .set(key, value) / .all()    // 需要 storage
 PickcatPlus.fetch(url, options)  // 需要 network，走 hosts 白名单
 PickcatPlus.onPostChange(cb)     // 用户切换帖子时触发
+PickcatPlus.dom.*                // 改页面（见 3.4.1），需要 dom-read / dom-write
 PickcatPlus.log(...args)         // 打到控制台，便于调试
 ```
 
@@ -255,6 +339,54 @@ const id = await PickcatPlus.addInteractionButton({ icon: '🔢', label: '字数
     await PickcatPlus.showToast(`正文 ${post.text.length} 字`);
 });
 ```
+
+### 3.4.1 改页面（DOM 桥）
+
+插件跑在 Worker 里，**没有 `document`**，也没有任何 DOM 对象。想改页面，就请宿主代做 —— 能力按两档给：
+
+| 清单里写 | 档位 | 能碰什么 |
+|---|---|---|
+| `"anchor": ["editor"]` | 🟡 均衡 | 只在锚点根之内的节点 |
+| `"permissions": [..., "dom-global"]` | 🔴 自由 | 整页（除扩展自己的界面） |
+
+锚点枚举：`editor`（帖子编辑框）、`composer`（发帖表单）、`post`（正文区）、`header`（顶栏 / 导航）。
+
+```js
+const { handles, count } = await PickcatPlus.dom.query('article h2', { anchor: 'post' });
+if (count) {
+    const h = handles[0];
+    await PickcatPlus.dom.style(h, 'border-left', '3px solid #fa322d');
+    await PickcatPlus.dom.setAttr(h, 'data-seen', '1');
+    console.log(await PickcatPlus.dom.text(h));
+}
+```
+
+可用方法（全部返回 Promise，句柄是字符串）：
+
+| 方法 | 权限 | 说明 |
+|---|---|---|
+| `dom.query(sel, { anchor, limit })` | dom-read | 返回 `{ count, handles, tags }`，最多 200 个 |
+| `dom.text(handle)` | dom-read | 取文本（≤20000 字） |
+| `dom.attr(handle, name)` | dom-read | 读属性 |
+| `dom.observe({ anchor })` + `dom.onChange(cb)` | dom-read | 页面变动通知，150ms 合并，最多 3 个区域 |
+| `dom.setAttr(handle, name, value)` | dom-write | 属性白名单见下 |
+| `dom.addClass` / `dom.removeClass(handle, cls)` | dom-write | 类名须匹配 `[a-zA-Z][\w-]{0,40}` |
+| `dom.style(handle, prop, value)` | dom-write | 样式白名单见下 |
+| `dom.setText(handle, text)` | dom-write | 纯文本（不解析 HTML） |
+| `dom.insert(handle, html, position)` | dom-write | `before / after / prepend / end`，HTML 会过消毒器 |
+
+**做不到的事**（不是没实现，是故意不给）：
+
+- 删除节点、写任意 `innerHTML`、读用户正在输入的内容；
+- 改 `href` / `src`、加 `on*` 事件属性、插 `<script> / <iframe> / <style>`；
+- 碰扩展自己的界面（设置面板、工坊卡片、装饰层）；
+- `position: fixed / sticky`、`url()`（防止盖住整页或往外发请求）、`z-index` 超 ±1200。
+
+样式白名单：颜色 / 背景 / 边框 / 阴影 / 字体 / 文本 / 透明度 / 间距 / 尺寸 / display / flex / grid / 定位（非 fixed）/ 圆角 / 光标 / transform / transition / animation / 滤镜等，具体见源码 `DOM_STYLE_ALLOW`。
+
+属性白名单：`class` / `title` / `placeholder` / `role` / `tabindex` / `disabled` / `hidden` / `aria-*`；自定义数据用 `data-*`。
+
+> 自由档（`dom-global`）不会自动启动：用户必须每次亲手点「手动运行」，跑起来后页面顶部会一直挂着一条「🔴 自由档运行中 · 停止」。
 
 ### 3.5 计算 sha256
 
@@ -315,7 +447,7 @@ GitHub Actions 自动跑：解析表单 → 审计代码 → 写文件 → 更�
 **注意「自动」的边界**：
 
 - **主题（纯 CSS）是真全自动**。CSS 改不了网页行为，我们能把它审计到「只允许画图」的程度（白名单见 2.4），所以机器判过就上架。
-- **插件（JS）是「自动上架 + 事后可秒撤」**。JS 没法在事前证明无害，机器只能挡住明显越界的写法（读 DOM、`eval`、外链、白名单外联网……）。**不要**写一个看起来像正常插件、实际干坏事的东西 —— 用户点右下角的 ⚑ 举报，维护者在手机上改 `workshop/revoked.json` 一行，最多 10 分钟全量停用并弹「已下架」。
+- **插件（JS）是「自动上架 + 事后可秒撤」**。JS 没法在事前证明无害，机器只能挡住明显越界的写法（读 DOM、`eval`、外链、白名单外联网……）。**不要**写一个看起来像正常插件、实际干坏事的东西 —— 用户点右下角的 ⚑ 举报，维护者在手机上改 `workshop/revoked.json` 一行，最多 10 分钟全量停用并弹「已下架」。**下架本身很快，但维护者周中拿不到手机，举报统一在周末 / 节假日处理。**
 
 ### 方式 B：提 PR（会 git 的话更快）
 
@@ -367,11 +499,18 @@ PR 只要**动的是 `workshop/` 里面的文件**、CI 全绿、且不是草稿
 
 ### 6.2 举报
 
+> 处理时效：维护者是学生，**周中拿不到手机，举报统一在周末 / 节假日处理**。
+> 点 ⚑ 的弹窗会先说这件事，并建议用户先去原帖评论区反馈 —— 那条路通常更快，维护者也会在站内发消息说明。
+
+
 社区条目的卡片上有一个 ⚑ 按钮，用户点它会打开一个**预填好的 GitHub Issue**（带条目 id、作者、问题类型勾选、浏览器版本）。举报是公开的，所有人都能看见处理过程 —— 这也是「不藏事」的一部分。
 
 ---
 
-## 7. 安全边界（请知悉）
+## 7. 安全边界
+
+> 线程模型（2.5.1 起）：**每个插件一个独立 Worker**。插件之间不共享全局作用域，
+> 死循环只会掐掉自己那个线程，其它插件不受影响。「应急逃生」会一次性销毁全部线程。（请知悉）
 
 - 插件跑在 `sandbox.html`（无 `chrome.*`、`origin: null`）。
 - **沙盒被 CSP 物理断网**：`connect-src 'none'; child-src 'none'; object-src 'none'`。也就是说插件进程里**根本没有可用的网络函数**，也造不出子 iframe 去另开一条路 —— 这是浏览器强制的，不是我们"帮忙删了一下"。
@@ -385,3 +524,127 @@ PR 只要**动的是 `workshop/` 里面的文件**、CI 全绿、且不是草稿
 ---
 
 有任何格式问题，先跑 `node tools/validate.mjs`；还不行就提 Issue 问，别憋着喵。
+
+---
+
+## 8. 换图标（条目配图）
+
+清单里一个字段搞定，三种写法任选其一：
+
+```json
+{ "icon": "🎃" }
+{ "icon": "https://pickcat.dao3.fun/api/v1/files/01a1xxxx-xxxx-7xxx-xxxx-xxxxxxxxxxxx" }
+{ "icon": "data:image/png;base64,iVBORw0KGgo..." }
+```
+
+| 写法 | 上限 | 说明 |
+| --- | --- | --- |
+| emoji | 4 个字符 | 最省事，任何环境都能显示 |
+| 官方图床直链 | 320 字符 | 上传到点猫图床后拿 `/api/v1/files/<uuid>`；**仓库里不放图片文件** |
+| data URI | 26KB | 单色线条图标内联，超过会被丢弃 |
+
+- 前缀写错（不是 `https://pickcat.dao3.fun/api/v1/files/`）、超过 26KB，客户端都会**静默丢弃并回落成 📦**，`tools/validate.mjs` 会直接报错。
+- 图片加载失败时自动变 🖼，不会留破图占位。
+- 详情页大图用 `"preview": { "image": "<同样的图床直链>" }`；想零网络就用 `preview.bg` 的 CSS 渐变。
+- 改完跑 `node tools/check.mjs`，它会校验 icon 与 preview.image。
+
+## 9. 让插件动页面（DOM 能力）
+
+插件本身没有 `document`，动页面必须由宿主代做。两个档位：
+
+### 9.1 均衡档：锚点内（推荐）
+
+清单声明锚点，插件只能碰锚点根**之内**的节点：
+
+```json
+{
+  "id": "my-editor-helper",
+  "type": "plugin",
+  "permissions": ["dom-read", "dom-write", "ui-interaction"],
+  "anchor": ["editor"]
+}
+```
+
+锚点枚举（只能这四个）：
+
+| 锚点 | 匹配到的东西 |
+| --- | --- |
+| `editor` | 发帖 / 回帖的输入区 |
+| `composer` | 编辑表单容器 |
+| `post` | 帖子正文区 |
+| `header` | 顶部导航 |
+
+插件里这样用：
+
+```js
+const hit = await PickcatPlus.dom.query('textarea, [contenteditable]', { anchor: 'editor' });
+if (hit.count) {
+    const h = hit.handles[0];
+    await PickcatPlus.dom.setAttr(h, 'placeholder', '在这里写点什么喵…');
+    await PickcatPlus.dom.style(h, 'min-height', '220px');
+    await PickcatPlus.dom.insert(h, '<div class="my-tip">已启用增强</div>', 'after');
+}
+```
+
+可用方法：`query` / `text` / `attr` / `setAttr` / `addClass` / `removeClass` / `style` / `setText` / `insert` / `observe` / `onChange`。
+
+### 9.2 自由档：整页（谨慎）
+
+`"permissions": ["dom-global"]` —— 不再受锚点限制，但：
+
+- 仍不能碰扩展自己的 UI（设置面板、插件条、工坊卡片、沙盒 iframe）
+- 仍不能删节点、不能写 `innerHTML`、不能改 `href` / `src`、不能插 `<script>` `<iframe>`
+- 用户必须把「允许安装」调到 🔴 自由，并**每 24 小时重签一次**确认
+- 自由档插件**不会自动启动**，每次要用户亲手点「手动运行」，页面顶部常驻「🔴 自由档运行中 N 个 · 停止」
+
+写属性 / 样式都是白名单制：`class` `title` `placeholder` `data-*` `aria-*` 等可写，`onclick` `href` `src` 一律拒绝；样式禁 `url()` `expression()` `position: fixed`，`z-index` 限 ±1200。
+
+## 10. 安全分级（谁能装什么）
+
+等级由**能力推导**，不是开发者随便填的：
+
+| 申请了 | 自动归为 | 用户侧显示 |
+| --- | --- | --- |
+| 什么都没有（纯数据 / 主题） | 🟢 安全 | 一次确认都不用 |
+| `dom-read` / `dom-write` / `ui-interaction` / `notify` / `storage` / `network` | 🟡 均衡 | 装第一个插件时签一次说明 |
+| `dom-global` | 🔴 自由 | 签免责（勾选 + 手打「自由」），24 小时后作废 |
+
+用户可以在工坊顶部把「允许安装」调低，调低之后高等级条目按钮会变成「🔒 需要🟡 均衡」，装不了。
+
+清单里也可以写 `"tier"`，但**只能把自己标得更严格**，不能标得更宽松——写 `safe` 而实际申请了 `dom-global`，仍然会按自由档处理。
+
+## 11. 发新版 / 客户端怎么更新
+
+### 11.1 一次发版要做的事
+
+1. 改三处版本号（**必须一致**，否则「检查更新」会一直误报）：
+   - `manifest.json` 的 `"version"`
+   - `content.js` 关于页里的 `PICKCAT Plus vX.Y.Z`
+   - `README.md` 徽章 `Version-vX.Y.Z`
+2. `README.md` 加一节 `### vX.Y.Z` 更新日志。
+3. `node tools/check.mjs`（清单 + 撤回表 + 六个 JS 语法）。
+4. `node tools/pack.mjs` → 生成 `PICKCAT-Plus-vX.Y.Z.zip` 并自动删旧包。
+5. 把改动传到 GitHub（网页上传即可；`.github/` 这类点开头目录要在网页里手打路径新建）。
+6. 发 Release，把 zip 传上去。
+
+### 11.2 客户端怎么知道自己该更新
+
+扩展是「解压加载」的，**没有自动更新通道**（Chrome 只给商店版本自动更新）。所以：
+
+- 关于页有「检查更新」：拉远端的 `manifest.json` 比版本号，结果缓存 6 小时。
+- 有新版 → 「🎉 有新版本 vX.Y.Z 可用」，按钮变「去下载」，点开 Release 页。
+- 没网 → 「检查失败，网络不太顺，稍后再试喵」，不影响任何功能。
+
+发布时**一定要更新远端 `manifest.json`**，否则所有人都会显示「已是最新」。
+
+### 11.3 工坊条目怎么更新
+
+清单条目的 `version` 比本地装的大，工坊卡片就会出现「可更新」徽章与「更新到 vX」按钮；插件权限有变化时会重新弹一次确认。设置面板里也能点「更新全部」。
+
+### 11.4 清单本身多久生效
+
+客户端拉社区清单的缓存是 **10 分钟**；点工坊的「同步」会立刻重拉。GitHub raw 自身还有约 5 分钟缓存，刚推上去的东西马上看不到很正常。
+
+## 12. 与 PickScribe 联动
+
+完整协议见 `INTEGRATION.md`。一句话：用 `window.postMessage` 互相自报家门（`pickcat:hello` / `pickscribe:hello`），Plus 的「关于」页会显示连接状态，对方装了就能一键「打开 PickScribe 助手」。

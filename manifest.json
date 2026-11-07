@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "PICKCAT Plus",
-  "version": "2.2.3",
+  "version": "2.6.0",
   "description": "更好的 PICKCAT 社区体验！",
   "permissions": [
     "storage"
@@ -27,6 +27,26 @@
         "content.js"
       ],
       "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://pickcat.dao3.fun/*"
+      ],
+      "js": [
+        "editor.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://pickcat.dao3.fun/*"
+      ],
+      "js": [
+        "suite/core.js",
+        "suite/shell.js",
+        "suite/winui.js"
+      ],
+      "run_at": "document_idle"
     }
   ],
   "sandbox": {
@@ -41,14 +61,12 @@
     {
       "resources": [
         "cursors/*",
-        "icons/kitten3.png",
-        "icons/kitten4.png",
-        "icons/boxplay.png",
-        "icons/dao3.png",
+        "icons/*",
         "sandbox.html",
         "sandbox.js",
         "workshop/*",
-        "workshop/packs/*"
+        "workshop/packs/*",
+        "suite/*.css"
       ],
       "matches": [
         "https://pickcat.dao3.fun/*"

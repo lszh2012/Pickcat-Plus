@@ -15,6 +15,12 @@
     'use strict';
 
     const TAG = '[pickcat-sandbox]';
+// 日志策略：默认安静，宿主开了「开发者模式」才会把这些细节打出来。
+let DEV_MODE = false;
+function slog() {
+    if (!DEV_MODE) return;
+    console.info.apply(console, arguments);
+}
     const ENV = 1;
 
     // 启动超时：插件 init 里卡住超过这么久，判定卡死
@@ -57,46 +63,7 @@
         } catch (e) { }
     }
 
-    /* ---------- 1. Worker 生命周期 ---------- */
-
-    let worker = null;
-    let workerStubbed = [];
-    let runTimer = null;
-    let runPluginId = null;
-    let lastBeat = Date.now();
-    let beatTimer = null;
-    const runningIds = new Set();
-    const callTimers = new Map();
-
-    function broadcastCrash(reason) {
-        const ids = runPluginId ? [runPluginId] : Array.from(runningIds);
-        console.warn(TAG, '插件卡死，已强制终止：' + (ids.join(', ') || '(unknown)') + '（' + reason + '）');
-        toParent({
-            type: 'crashed',
-            payload: { id: ids[0] || null, ids: ids, reason: reason }
-        });
-        runPluginId = null;
-        runningIds.clear();
-    }
-
-    function clearRunTimer() {
-        if (runTimer) { clearTimeout(runTimer); runTimer = null; }
-    }
-
-    function killWorker(reason) {
-        clearRunTimer();
-        if (beatTimer) { clearInterval(beatTimer); beatTimer = null; }
-        callTimers.forEach((t) => clearTimeout(t));
-        callTimers.clear();
-        if (worker) {
-            try { worker.terminate(); } catch (e) { }
-            worker = null;
-        }
-        broadcastCrash(reason);
-        spawnWorker();
-    }
-
-
+    // 每插件一个 Worker，生命周期管理见下面「2. 宿主 → Worker」之前的池实现
     /* ---------- Worker 源码（内联，避免 null origin 取不到扩展资源） ---------- */
 
     const WORKER_SRC = String.raw`/* ============================================================
@@ -117,6 +84,12 @@
     'use strict';
 
     const TAG = '[pickcat-worker]';
+    // Worker 是独立线程，没有 chrome.*，开关由宿主经中继转发过来
+    let DEV_MODE = false;
+    function slog() {
+        if (!DEV_MODE) return;
+        console.info.apply(console, arguments);
+    }
     const ENV = 1;
 
     /* ---------- 0. 抹掉原生网络 API ---------- */
@@ -155,12 +128,18 @@
 
     function call(method, args, pluginId) {
         return new Promise((resolve, reject) => {
+            // 已经停止/卸载的插件不许再调 API —— 否则一个还没跑完的 async 回调
+            // 会在「应急逃生」关掉之后把界面又建回来（看起来就是死而复生）。
+            if (pluginId && stopped.has(pluginId)) {
+                reject(new Error('插件已停止'));
+                return;
+            }
             const id = 'c' + (++seq);
             const timer = setTimeout(() => {
                 pending.delete(id);
                 reject(new Error('调用 ' + method + ' 超时'));
             }, 25000);
-            pending.set(id, { resolve: resolve, reject: reject, timer: timer });
+            pending.set(id, { resolve: resolve, reject: reject, timer: timer, pluginId: pluginId || '' });
             post({ type: 'call', id: id, method: method, args: args || {}, pluginId: pluginId || 'unknown' });
         });
     }
@@ -178,10 +157,27 @@
             else p.reject(new Error((d.data && d.data.error) || '调用失败'));
             return;
         }
-        if (d.type === 'run') { loadPlugin(d.payload); return; }
+        if (d.type === 'dev') {
+            DEV_MODE = !!(d.payload && d.payload.on);
+            try {
+                if (worker) worker.postMessage({ __pickcat: ENV, type: 'dev', payload: { on: DEV_MODE } });
+            } catch (e) { }
+            return;
+        }
+        if (d.type === 'run') { slog(TAG, '▶ 运行插件：' + ((d.payload || {}).id)); loadPlugin(d.payload); return; }
         if (d.type === 'stop') {
-            plugins.delete((d.payload || {}).id);
-            post({ type: 'plugin-unloaded', payload: { id: (d.payload || {}).id } });
+            const sid = (d.payload || {}).id;
+            slog(TAG, '■ 停止插件：' + sid);
+            stopped.add(sid);
+            plugins.delete(sid);
+            // 把这个插件所有还在路上的调用直接掐掉，别让回调在停止后继续改页面
+            pending.forEach((p, cid) => {
+                if (p.pluginId !== sid) return;
+                pending.delete(cid);
+                clearTimeout(p.timer);
+                p.reject(new Error('插件已停止'));
+            });
+            post({ type: 'plugin-unloaded', payload: { id: sid } });
             return;
         }
         if (d.type === 'storage-sync') {
@@ -195,6 +191,9 @@
     /* ---------- 2. 插件注册表 ---------- */
 
     const plugins = new Map();
+    // 被停止（卸载 / 应急逃生）过的插件 id：它们的 async 回调可能还没跑完，
+    // 用这个集合把它们后续的每一次 API 调用都挡掉。
+    const stopped = new Set();
 
     function hasPerm(rec, perm) {
         const granted = (rec.meta && rec.meta.granted) || [];
@@ -219,6 +218,12 @@
         if (name === 'post-change') {
             plugins.forEach((rec, id) => {
                 (rec.handlers.postChange || []).forEach((cb) => safeInvoke(id, rec, cb, payload.data));
+            });
+            return;
+        }
+        if (name === 'dom-change') {
+            plugins.forEach((rec, id) => {
+                (rec.handlers.domChange || []).forEach((cb) => safeInvoke(id, rec, cb, payload.anchor));
             });
         }
     }
@@ -328,11 +333,65 @@
                 rec.handlers.postChange.push(cb);
             },
 
+            /* ---- DOM（Tier B / Tier C）----
+             * 注意：这里没有任何 DOM 对象。每次调用都是「请宿主代我做」，
+             * 宿主那边会再校验一遍节点归不归这个插件管。
+             * 句柄是字符串，只在本次页面生命周期内有效。
+             */
+            dom: {
+                query: function (selector, opt) {
+                    requirePerm(rec, 'dom-read');
+                    const o = opt || {};
+                    return rpc('dom.query', { selector: String(selector || ''), anchor: o.anchor, limit: o.limit });
+                },
+                text: function (handle) {
+                    requirePerm(rec, 'dom-read');
+                    return rpc('dom.text', { handle: handle });
+                },
+                attr: function (handle, name) {
+                    requirePerm(rec, 'dom-read');
+                    return rpc('dom.attr', { handle: handle, name: String(name || '') });
+                },
+                setAttr: function (handle, name, value) {
+                    requirePerm(rec, 'dom-write');
+                    return rpc('dom.setAttr', { handle: handle, name: String(name || ''), value: value });
+                },
+                addClass: function (handle, cls) {
+                    requirePerm(rec, 'dom-write');
+                    return rpc('dom.addClass', { handle: handle, class: String(cls || '') });
+                },
+                removeClass: function (handle, cls) {
+                    requirePerm(rec, 'dom-write');
+                    return rpc('dom.removeClass', { handle: handle, class: String(cls || '') });
+                },
+                style: function (handle, prop, value) {
+                    requirePerm(rec, 'dom-write');
+                    return rpc('dom.style', { handle: handle, prop: String(prop || ''), value: String(value === undefined ? '' : value) });
+                },
+                setText: function (handle, text) {
+                    requirePerm(rec, 'dom-write');
+                    return rpc('dom.setText', { handle: handle, text: String(text === undefined ? '' : text) });
+                },
+                insert: function (handle, html, position) {
+                    requirePerm(rec, 'dom-write');
+                    return rpc('dom.insert', { handle: handle, html: String(html || ''), position: String(position || 'end') });
+                },
+                observe: function (opt) {
+                    requirePerm(rec, 'dom-read');
+                    const o = opt || {};
+                    return rpc('dom.observe', { anchor: o.anchor });
+                },
+                onChange: function (cb) {
+                    if (typeof cb !== 'function') return;
+                    rec.handlers.domChange.push(cb);
+                }
+            },
+
             log: function () {
                 const args = Array.prototype.slice.call(arguments).map(function (a) {
                     try { return typeof a === 'string' ? a : JSON.stringify(a); } catch (e) { return String(a); }
                 }).join(' ');
-                console.log(TAG, '[plugin:' + meta.id + ']', args);
+                slog(TAG, '[plugin:' + meta.id + ']', args);
                 post({ type: 'log', payload: { pluginId: meta.id, level: 'info', text: args } });
             }
         };
@@ -399,11 +458,12 @@
         if (!payload || !payload.id) return;
         const id = payload.id;
         plugins.delete(id);
+        stopped.delete(id);          // 重新运行 = 解除停止标记
 
         const rec = {
             meta: payload.meta || { id: id },
             data: payload.data || {},
-            handlers: { buttons: new Map(), postChange: [] }
+            handlers: { buttons: new Map(), postChange: [], domChange: [] }
         };
         plugins.set(id, rec);
 
@@ -429,7 +489,7 @@
             const ret = fn(api);
             if (ret && typeof ret.then === 'function') {
                 ret.then(function () {
-                    console.log(TAG, '插件已就绪：' + id);
+                    slog(TAG, '插件已就绪：' + id);
                     post({ type: 'log', payload: { pluginId: id, level: 'ready', text: '插件已就绪' } });
                     post({ type: 'run-ok', payload: { id: id } });
                 }).catch(function (e) { reportError(id, e); });
@@ -456,7 +516,7 @@
         }
     });
 
-    console.log(TAG, 'ready, 已拦截:', STUBBED.join(','));
+    slog(TAG, 'ready, 已拦截:', STUBBED.join(','));
 
     // 心跳：每 2 秒报一次活着。沙盒页靠它判断"是不是死循环了"。
     // 关键点：await 等待期间事件循环是空的，定时器照常触发；
@@ -469,6 +529,17 @@
 })();
 `;
 
+    /* ---------- 每插件一个 Worker ----------
+     *
+     * 早期版本所有插件共用同一个 Worker：省事，但一个插件写个
+     * while(true) 就会把别的插件一起拖死（还只能靠心跳整体重启）。
+     * 现在改成「一个插件一个线程」：
+     *   - 谁死循环就掐谁，别的插件照跑
+     *   - 插件 A 改全局变量污染不到插件 B
+     *   - 停用/卸载 = 直接 terminate，比往线程里塞消息干净
+     * 代价是每个插件多一个 Worker，几十个插件才会明显吃内存。
+     */
+
     let workerUrlCache = null;
     function workerUrl() {
         if (!workerUrlCache) {
@@ -477,70 +548,124 @@
         return workerUrlCache;
     }
 
-    function spawnWorker() {
+    const pool = new Map();        // pluginId -> { w, lastBeat, calls: Map<callId, timer>, alive }
+    const callOwner = new Map();   // callId -> pluginId（把 worker 的调用号映射回插件）
+    let workerStubbed = [];
+    let beatTimer = null;
+
+    function poolEntry(id) {
+        return pool.get(id) || null;
+    }
+
+    function killOne(id, reason, silent) {
+        const ent = pool.get(id);
+        if (!ent) return false;
+        try { ent.calls.forEach((t) => clearTimeout(t)); } catch (e) { }
+        try { ent.w.terminate(); } catch (e) { }
+        pool.delete(id);
+        callOwner.forEach((owner, cid) => { if (owner === id) callOwner.delete(cid); });
+        if (!silent) {
+            console.warn(TAG, '插件 ' + id + ' 已停止：' + reason);
+            toParent({ type: 'crashed', payload: { id: id, ids: [id], reason: reason } });
+        }
+        return true;
+    }
+
+    function resetAll(reason) {
+        Array.from(pool.keys()).forEach((id) => killOne(id, reason || 'reset', true));
+        pool.clear();
+        callOwner.clear();
+    }
+
+    function spawnFor(id) {
+        let ent = pool.get(id);
+        if (ent) { killOne(id, '重新启动', true); }
+
+        let w;
         try {
-            worker = new Worker(workerUrl());
+            w = new Worker(workerUrl());
         } catch (e) {
-            console.warn(TAG, 'Worker 创建失败，插件系统不可用：' + (e && e.message));
+            console.warn(TAG, 'Worker 创建失败：' + (e && e.message));
             toParent({ type: 'worker-failed', payload: { error: String(e && e.message || e) } });
-            return;
+            return null;
         }
 
-        worker.onerror = function (e) {
-            console.warn(TAG, 'Worker 内部错误：' + (e && e.message));
+        ent = { w: w, lastBeat: Date.now(), calls: new Map(), alive: true };
+        pool.set(id, ent);
+
+        w.onerror = function (e) {
+            console.warn(TAG, '[' + id + '] Worker 内部错误：' + (e && e.message));
         };
 
-        worker.onmessage = function (ev) {
+        w.onmessage = function (ev) {
             const d = ev.data;
             if (!d || d.__pickcat !== ENV) return;
 
             if (d.type === 'worker-ready') {
                 const s = d.self || {};
-                workerStubbed = s.stubbedNet || [];
-                console.log(TAG, 'worker ready, 已拦截:', workerStubbed.join(','));
+                workerStubbed = s.stubbedNet || workerStubbed;
+                slog(TAG, '[' + id + '] worker ready, 已拦截:', workerStubbed.join(','));
                 return;
             }
 
             if (d.type === 'heartbeat') {
-                lastBeat = Date.now();
+                ent.lastBeat = Date.now();
                 return;
             }
 
             if (d.type === 'run-ok') {
-                clearRunTimer();
                 return;
             }
 
             if (d.type === 'call') {
-                // 宿主回复超时也算卡死：说明 Worker 在回调里死循环了。
-                // 但 fetch 除外 —— 大模型接口本身就可能跑 20 秒以上，
-                // 那条链路有自己的 30 秒超时，别把慢网络误判成死循环。
-                if (d.method !== 'fetch' && d.id && !callTimers.has(d.id)) {
-                    callTimers.set(d.id, setTimeout(() => {
-                        callTimers.delete(d.id);
-                        killWorker('能力调用 20 秒无响应');
+                // 宿主回复超时也算卡死，但 fetch 豁免（大模型接口本来就能跑很久）
+                if (d.method !== 'fetch' && d.id) {
+                    callOwner.set(d.id, id);
+                    ent.calls.set(d.id, setTimeout(() => {
+                        ent.calls.delete(d.id);
+                        killOne(id, '能力调用 20 秒无响应');
                     }, CALL_TIMEOUT));
+                } else if (d.id) {
+                    callOwner.set(d.id, id);
+                }
+                if (d.payload && typeof d.payload === 'object' && !d.payload.__pluginId) {
+                    d.payload.__pluginId = id;
                 }
                 toParent(d);
                 return;
             }
 
+            if (d.type === 'log' && d.payload && !d.payload.pluginId) d.payload.pluginId = id;
             toParent(d);
         };
 
-        worker.postMessage({ __pickcat: ENV, type: 'ping' });
+        w.postMessage({ __pickcat: ENV, type: 'ping' });
 
-        // 心跳看门狗：Worker 每 2 秒报一次活着，超过 12 秒没动静就当它死循环了。
-        // 这是唯一能抓到"点击回调里死循环"的手段 —— 那种情况下没有任何
-        // 未完成的 RPC，20 秒调用超时永远不会触发。
-        lastBeat = Date.now();
-        if (beatTimer) clearInterval(beatTimer);
-        beatTimer = setInterval(function () {
-            if (!worker) return;
-            if (Date.now() - lastBeat > 12000) {
-                killWorker('插件 12 秒没有心跳（疑似死循环）');
-            }
-        }, 3000);
+        // 每个 Worker 自己一份心跳看门狗的数据；总定时器只跑一个
+        if (!beatTimer) {
+            beatTimer = setInterval(function () {
+                const now = Date.now();
+                Array.from(pool.entries()).forEach(([pid, e]) => {
+                    if (now - e.lastBeat > 12000) {
+                        killOne(pid, '插件 12 秒没有心跳（疑似死循环）');
+                    }
+                });
+            }, 3000);
+        }
+
+        return ent;
+    }
+
+    function postTo(id, msg) {
+        const ent = poolEntry(id);
+        if (!ent) return false;
+        try { ent.w.postMessage(msg); return true; } catch (e) { return false; }
+    }
+
+    function postAll(msg) {
+        let any = false;
+        pool.forEach((ent) => { try { ent.w.postMessage(msg); any = true; } catch (e) { } });
+        return any;
     }
 
     /* ---------- 2. 宿主 → Worker ---------- */
@@ -550,44 +675,74 @@
         if (!d || d.__pickcat !== ENV) return;
 
         if (d.type === 'call-reply') {
-            const t = callTimers.get(d.id);
-            if (t) { clearTimeout(t); callTimers.delete(d.id); }
-            if (worker) worker.postMessage(d);
+            const owner = callOwner.get(d.id);
+            if (owner) {
+                const ent = poolEntry(owner);
+                if (ent) {
+                    const t = ent.calls.get(d.id);
+                    if (t) { clearTimeout(t); ent.calls.delete(d.id); }
+                    try { ent.w.postMessage(d); } catch (e) { }
+                }
+                callOwner.delete(d.id);
+            }
+            return;
+        }
+
+        if (d.type === 'dev') {
+            DEV_MODE = !!(d.payload && d.payload.on);
+            postAll(d);
             return;
         }
 
         if (d.type === 'run') {
             const id = (d.payload || {}).id;
-            runPluginId = id;
-            if (id) runningIds.add(id);
-            // 注意：这里**不再**用「启动 N 秒没跑完就算卡死」。
-            // 插件初始化里 await 一次慢网络是完全合法的（比如大模型接口），
-            // 用总时长判卡死会误杀。真正的判据是心跳：
-            // 等待 await 时事件循环是空的，心跳照发；只有同步死循环才会断。
-            if (worker) worker.postMessage(d);
-            else toParent({ type: 'crashed', payload: { id: id, reason: '插件运行时未启动' } });
+            if (!id) return;
+            // 重启：先干掉旧的，再起一个干净线程
+            if (!spawnFor(id)) return;
+            postTo(id, d);
             return;
         }
 
         if (d.type === 'stop') {
             const sid = (d.payload || {}).id;
-            if (runPluginId === sid) { runPluginId = null; clearRunTimer(); }
-            if (sid) runningIds.delete(sid);
-            if (worker) worker.postMessage(d);
+            if (sid) killOne(sid, '插件被停用', true);
             return;
         }
 
-        if (d.type === 'storage-sync' || d.type === 'event') {
-            if (worker) worker.postMessage(d);
+        if (d.type === 'storage-sync') {
+            postAll(d);
+            return;
+        }
+
+        if (d.type === 'event') {
+            const p = d.payload || {};
+            // 按钮点击只发给它自己的插件；其余广播
+            if (p.name === 'button-click' && p.buttonId && p.buttonId.indexOf('::') > 0) {
+                postTo(String(p.buttonId).split('::')[0], d);
+            } else {
+                postAll(d);
+            }
             return;
         }
 
         if (d.type === 'revive') {
-            // 宿主侧「重试」：重建一个干净的 Worker
-            killWorker('用户手动重启插件');
+            const rid = (d.payload || {}).id;
+            if (rid) {
+                killOne(rid, '用户手动重启插件', true);
+            } else {
+                resetAll('用户手动重启插件');
+            }
+            return;
+        }
+
+        if (d.type === 'reset') {
+            // 应急逃生：全部就地销毁
+            resetAll('应急逃生');
+            toParent({ type: 'worker-reset', payload: {} });
             return;
         }
     });
+
 
     /* ---------- 3. 开机 ---------- */
 
@@ -604,7 +759,7 @@
         }
     });
 
-    spawnWorker();
+    // Worker 按需创建（每插件一个），开机只做自检
 
     const self = {
         origin: (function () { try { return String(location.origin); } catch (e) { return 'unknown'; } })(),
@@ -616,6 +771,6 @@
         at: Date.now()
     };
 
-    console.log(TAG, 'ready', self);
+    slog(TAG, 'ready', self);
     toParent({ type: 'ready', self: self });
 })();

@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>创意工坊 · PICKCAT Plus</title>
+<style>
+/* 配色直接对着 PICKCAT 站点的 --ui-* 变量抄：
+   底色 20.5% 中性灰、卡片 26.9%、边框 26.9%、主色 #fa322d。
+   圆角用站点同款（卡片 8px、按钮 6px），不用 999px 药丸。 */
+:root {
+    --bg: #ffffff;
+    --bg-muted: #f6f6f6;
+    --bg-elevated: #f0f0f0;
+    --bg-input: #ffffff;
+    --text: #1c1c1c;
+    --text-muted: #6b6b6b;
+    --text-dimmed: #9a9a9a;
+    --border: rgba(0, 0, 0, .12);
+    --border-muted: rgba(0, 0, 0, .07);
+    --primary: #fa322d;
+    --primary-hover: #e02b26;
+    --primary-soft: rgba(250, 50, 45, .10);
+    --success: #0f9d58;
+    --warn: #b45309;
+    --danger: #d92d20;
+    --radius-card: 8px;
+    --radius-ctl: 6px;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #1a1a1a;
+        --bg-muted: #131313;
+        --bg-elevated: #2b2b2b;
+        --bg-input: #232323;
+        --text: #ebebeb;
+        --text-muted: #b3b3b3;
+        --text-dimmed: #8a8a8a;
+        --border: #2b2b2b;
+        --border-muted: #232323;
+        --primary: #fa322d;
+        --primary-hover: #ff4a45;
+        --primary-soft: rgba(250, 50, 45, .14);
+        --success: #4ade80;
+        --warn: #f0b132;
+        --danger: #ff6b6b;
+    }
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+    display: flex;
+    flex-direction: column;
+    -webkit-font-smoothing: antialiased;
+}
+a { color: var(--primary); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* 滚动条也跟站点一致：细、无轨道 */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+    background: var(--border-muted);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--text-dimmed); background-clip: content-box; }
+
+/* ---------- 顶栏 ---------- */
+header {
+    position: sticky; top: 0; z-index: 20;
+    display: flex; align-items: center; gap: 10px;
+    height: 56px; padding: 0 20px;
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+}
+.brand {
+    display: flex; align-items: baseline; gap: 8px;
+    font-size: 15px; font-weight: 600; white-space: nowrap; letter-spacing: .01em;
+}
+.brand .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--primary); align-self: center; }
+.brand-sub { font-size: 11px; font-weight: 400; color: var(--text-dimmed); letter-spacing: .04em; }
+
+.search {
+    flex: 1; min-width: 140px; max-width: 380px;
+    display: flex; align-items: center;
+    height: 34px; padding: 0 10px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-ctl);
+}
+.search input {
+    flex: 1; height: 100%; border: 0; outline: 0; background: transparent;
+    color: var(--text); font: inherit; font-size: 13px;
+}
+.search input::placeholder { color: var(--text-dimmed); }
+.search:focus-within { border-color: var(--text-dimmed); }
+
+.spacer { flex: 1; }
+
+.btn {
+    height: 34px; padding: 0 12px;
+    border-radius: var(--radius-ctl);
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    font: inherit; font-size: 13px;
+    cursor: pointer; white-space: nowrap;
+    transition: background .14s, border-color .14s, color .14s;
+}
+.btn:hover { background: var(--bg-elevated); border-color: var(--text-dimmed); }
+.btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 500; }
+.btn.primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+.btn.danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+.btn.danger:hover { background: color-mix(in srgb, var(--danger) 10%, transparent); }
+.btn[disabled] { opacity: .45; cursor: not-allowed; }
+
+select.pill {
+    height: 34px; padding: 0 8px;
+    border-radius: var(--radius-ctl);
+    font: inherit; font-size: 13px; cursor: pointer;
+    background: transparent; color: var(--text);
+    border: 1px solid var(--border);
+}
+select.pill:hover { background: var(--bg-elevated); }
+select.pill.free { border-color: var(--danger); color: var(--danger); }
+
+/* ---------- 主体 ---------- */
+main { flex: 1; display: flex; min-height: 0; }
+
+aside {
+    width: 196px; flex: 0 0 196px;
+    padding: 14px 10px;
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+}
+.cat {
+    display: flex; align-items: center; gap: 8px;
+    height: 34px; padding: 0 10px; margin-bottom: 2px;
+    border-radius: var(--radius-ctl);
+    color: var(--text-muted);
+    font-size: 13px;
+    cursor: pointer; user-select: none;
+    border-left: 2px solid transparent;
+}
+.cat:hover { background: var(--bg-elevated); color: var(--text); }
+.cat.active {
+    background: var(--bg-elevated); color: var(--text);
+    font-weight: 500; border-left-color: var(--primary);
+}
+.cat .n { margin-left: auto; font-size: 11px; color: var(--text-dimmed); font-variant-numeric: tabular-nums; }
+.side-title {
+    margin: 16px 10px 6px; font-size: 11px; font-weight: 500;
+    color: var(--text-dimmed); letter-spacing: .08em;
+}
+
+section.list-wrap { flex: 1; min-width: 0; overflow-y: auto; padding: 16px 20px 60px; }
+
+/* 卡片：默认是一行一条（分隔线），多列时才成为格子 */
+.list {
+    display: grid; gap: 0;
+    grid-template-columns: repeat(var(--cols, 1), minmax(0, 1fr));
+    max-width: 1080px;
+    border-top: 1px solid var(--border-muted);
+}
+.list[data-cols="2"], .list[data-cols="3"] { gap: 10px; border-top: 0; }
+
+.card {
+    display: flex; gap: 12px;
+    padding: 14px 4px;
+    border-bottom: 1px solid var(--border-muted);
+    cursor: pointer;
+    transition: background .12s;
+}
+.card:hover { background: var(--bg-elevated); }
+.list[data-cols="2"] .card, .list[data-cols="3"] .card {
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--bg-muted);
+}
+.list[data-cols="2"] .card:hover, .list[data-cols="3"] .card:hover { border-color: var(--text-dimmed); }
+.card.installed { border-left: 2px solid var(--primary); padding-left: 10px; }
+.list[data-cols="2"] .card.installed, .list[data-cols="3"] .card.installed { border-left: 2px solid var(--primary); padding-left: 10px; }
+.card.revoked { opacity: .55; }
+
+.thumb {
+    width: 44px; height: 44px; flex: 0 0 44px;
+    border-radius: var(--radius-ctl);
+    display: grid; place-items: center;
+    font-size: 20px; overflow: hidden;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-muted);
+    background-size: cover; background-position: center;
+}
+.thumb img { width: 100%; height: 100%; object-fit: cover; }
+.thumb-emo { font-size: 20px; line-height: 1; }
+
+.card-body { min-width: 0; flex: 1; }
+.card-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.card-title h3 { margin: 0; font-size: 14px; font-weight: 600; line-height: 1.4; }
+.card-desc {
+    margin: 4px 0 0;
+    color: var(--text-muted); font-size: 13px; line-height: 1.55;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.list[data-cols="1"] .card-desc { -webkit-line-clamp: 2; }
+
+/* 标签去掉彩色药丸：小号灰字，用中点分隔 */
+.tags {
+    display: flex; gap: 0; flex-wrap: wrap; align-items: center;
+    margin-top: 6px; font-size: 12px; color: var(--text-dimmed);
+}
+.tags > * + *::before {
+    content: "·"; margin: 0 7px; color: var(--border);
+}
+.tag { font-size: 12px; color: var(--text-dimmed); white-space: nowrap; }
+.tag .dot {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    margin-right: 5px; vertical-align: 1px; background: currentColor;
+}
+.dot-safe { background: var(--success); }
+.dot-balanced { background: var(--warn); }
+.dot-free { background: var(--danger); }
+.tag.tier-safe, .tag.tier-balanced, .tag.tier-free { color: var(--text-muted); }
+.tag.tier-free { color: var(--danger); }
+.tag.claim { color: var(--warn); }
+.tag.net { color: var(--danger); }
+
+.badge {
+    font-size: 11px; font-weight: 500;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0 5px;
+    line-height: 17px;
+}
+.badge.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+.author { color: var(--text-dimmed); font-size: 12px; }
+
+/* ---------- 详情抽屉 ---------- */
+.drawer-mask {
+    position: fixed; inset: 0; background: rgba(0, 0, 0, .45);
+    opacity: 0; pointer-events: none; transition: opacity .18s; z-index: 40;
+}
+.drawer-mask.open { opacity: 1; pointer-events: auto; }
+.drawer {
+    position: fixed; top: 0; right: 0; bottom: 0;
+    width: min(520px, 92vw);
+    background: var(--bg);
+    border-left: 1px solid var(--border);
+    transform: translateX(100%);
+    transition: transform .2s cubic-bezier(.2, .8, .2, 1);
+    z-index: 41; display: flex; flex-direction: column;
+}
+.drawer.open { transform: none; }
+.drawer-head {
+    display: flex; align-items: flex-start; gap: 14px;
+    padding: 18px 20px 14px;
+    border-bottom: 1px solid var(--border);
+}
+.drawer-head .thumb { width: 56px; height: 56px; flex-basis: 56px; font-size: 26px; }
+.drawer-title h2 { margin: 0 0 3px; font-size: 17px; font-weight: 600; }
+.drawer-body { flex: 1; overflow-y: auto; padding: 16px 20px 28px; }
+.drawer-body p { margin: 0 0 10px; font-size: 13px; line-height: 1.65; }
+.kv {
+    display: grid; grid-template-columns: 80px 1fr; gap: 8px 14px;
+    font-size: 13px; margin: 0 0 16px;
+    padding: 12px 14px; background: var(--bg-muted);
+    border: 1px solid var(--border-muted); border-radius: var(--radius-card);
+}
+.kv dt { color: var(--text-dimmed); }
+.kv dd { margin: 0; word-break: break-word; }
+.kv code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+.preview img { width: 100%; max-height: 320px; object-fit: cover; display: block; border-radius: var(--radius-ctl); margin-bottom: 10px; }
+.preview {
+    height: 140px; border-radius: var(--radius-card);
+    border: 1px solid var(--border);
+    background-size: cover; background-position: center;
+    margin-bottom: 14px;
+    display: grid; place-items: center; font-size: 34px;
+}
+.section-label {
+    font-size: 11px; font-weight: 500; color: var(--text-dimmed);
+    letter-spacing: .08em;
+    margin: 18px 0 6px;
+}
+.perm-list { display: flex; flex-wrap: wrap; gap: 0; font-size: 12px; color: var(--text-muted); }
+.perm-list > * + *::before { content: "·"; margin: 0 7px; color: var(--border); }
+.drawer-foot {
+    display: flex; gap: 8px; padding: 12px 20px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-muted);
+}
+.drawer-foot .btn { flex: 1; }
+
+/* ---------- 弹窗 ---------- */
+.modal-mask {
+    position: fixed; inset: 0; z-index: 60; display: none;
+    align-items: center; justify-content: center; padding: 24px;
+    background: rgba(0, 0, 0, .55);
+}
+.modal-mask.open { display: flex; }
+.modal {
+    width: min(440px, 100%); max-height: 86vh; overflow-y: auto;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 18px 48px rgba(0, 0, 0, .4);
+    padding: 20px;
+}
+.modal h3 { margin: 0 0 6px; font-size: 16px; font-weight: 600; }
+.modal .sub { color: var(--text-muted); font-size: 13px; margin: 0 0 12px; }
+.modal ul { margin: 0 0 12px; padding-left: 18px; font-size: 13px; color: var(--text-muted); }
+.modal li { margin-bottom: 5px; }
+.modal .check { display: flex; gap: 9px; align-items: flex-start; font-size: 13px; margin: 12px 0; }
+.modal .check input { margin-top: 4px; accent-color: var(--primary); }
+.modal input[type="text"] {
+    width: 100%; height: 34px; padding: 0 10px;
+    font: inherit; font-size: 13px;
+    border-radius: var(--radius-ctl);
+    border: 1px solid var(--border);
+    background: var(--bg-input); color: var(--text);
+    margin-top: 6px;
+}
+.modal input[type="text"]:focus { outline: 0; border-color: var(--text-dimmed); }
+.modal-foot { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+.warnbox {
+    padding: 10px 12px; border-radius: var(--radius-card); font-size: 13px; line-height: 1.6;
+    background: color-mix(in srgb, var(--danger) 10%, transparent);
+    color: var(--danger);
+    border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+    margin-bottom: 10px;
+}
+.empty { color: var(--text-dimmed); text-align: center; padding: 60px 0; font-size: 13px; }
+
+/* ---------- Toast ---------- */
+#toast {
+    position: fixed; left: 50%; bottom: 24px;
+    transform: translate(-50%, 16px);
+    max-width: 80vw; padding: 9px 14px;
+    border-radius: var(--radius-ctl);
+    font-size: 13px;
+    background: var(--bg-elevated);
+    color: var(--text);
+    border: 1px solid var(--border);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
+    opacity: 0; pointer-events: none;
+    transition: .18s; z-index: 80;
+}
+#toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+.hint-panel {
+    max-width: 1080px; margin: 0 0 12px; padding: 10px 12px;
+    border-radius: var(--radius-card); font-size: 13px;
+    background: var(--primary-soft);
+    color: var(--text);
+    border: 1px solid color-mix(in srgb, var(--primary) 25%, transparent);
+    display: none;
+}
+.hint-panel.show { display: block; }
+</style>
+</head>
+<body>
+<header>
+    <div class="brand"><span class="dot"></span>创意工坊<span class="brand-sub">PICKCAT Plus</span></div>
+    <div class="search">
+        <input id="kw" type="search" placeholder="搜索主题、插件或作者" autocomplete="off">
+    </div>
+    <button class="btn" id="sync" title="从 GitHub 重新拉取社区清单">同步</button>
+    <select class="pill" id="tier" title="允许安装的最高等级">
+        <option value="safe">只允许「安全」</option>
+        <option value="balanced" selected>允许「均衡」</option>
+        <option value="free">允许「自由」</option>
+    </select>
+    <select class="pill" id="cols" title="每行卡片数">
+        <option value="1" selected>单列</option>
+        <option value="2">两列</option>
+        <option value="3">三列</option>
+    </select>
+    <div class="spacer"></div>
+    <span class="author" id="status"></span>
+    <button class="btn" id="openPanel" title="回到 PICKCAT 页面的设置面板">设置面板</button>
+</header>
+
+<main>
+    <aside>
+        <div class="cat active" data-cat="all">全部 <span class="n" id="n-all">0</span></div>
+        <div class="cat" data-cat="theme">个性主题 <span class="n" id="n-theme">0</span></div>
+        <div class="cat" data-cat="plugin">功能增强 <span class="n" id="n-plugin">0</span></div>
+        <div class="cat" data-cat="ai">AI · 第三方 <span class="n" id="n-ai">0</span></div>
+        <div class="cat" data-cat="link">联动 <span class="n" id="n-link">0</span></div>
+        <div class="side-title">我的</div>
+        <div class="cat" data-cat="installed">已安装 <span class="n" id="n-installed">0</span></div>
+        <div class="side-title">关于</div>
+        <div class="cat" data-cat="__docs">开发者文档</div>
+        <div class="cat" data-cat="__repo">GitHub 仓库</div>
+    </aside>
+
+    <section class="list-wrap">
+        <div class="hint-panel" id="pageHint"></div>
+        <div class="list" id="list" data-cols="1"></div>
+        <div class="empty" id="empty" style="display:none">这里还什么都没有喵</div>
+    </section>
+</main>
+
+<div class="drawer-mask" id="mask"></div>
+<div class="drawer" id="drawer">
+    <div class="drawer-head" id="drawerHead"></div>
+    <div class="drawer-body" id="drawerBody"></div>
+    <div class="drawer-foot" id="drawerFoot"></div>
+</div>
+
+<div class="modal-mask" id="modalMask"><div class="modal" id="modal"></div></div>
+<div id="toast"></div>
+
+<script src="workshop.js"></script>
+</body>
+</html>

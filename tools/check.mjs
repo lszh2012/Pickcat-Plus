@@ -24,7 +24,7 @@ step('社区清单', ['tools/validate.mjs', 'workshop/community.json', ...fixArg
 step('内置清单', ['tools/validate.mjs', 'workshop/builtin.json', ...fixArgs]);
 step('撤回表', ['tools/validate-revoked.mjs']);
 
-for (const f of ['content.js', 'sandbox.js', 'background.js']) {
+for (const f of ['content.js', 'editor.js', 'sandbox.js', 'background.js', 'workshop.js', 'suite/core.js', 'suite/shell.js', 'suite/winui.js']) {
   if (!existsSync(resolve(ROOT, f))) continue;
   process.stdout.write(`\n===== 语法检查 ${f} =====\n`);
   const r = spawnSync(process.execPath, ['--check', f], { cwd: ROOT, stdio: 'inherit' });

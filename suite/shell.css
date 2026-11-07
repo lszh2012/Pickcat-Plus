@@ -1,0 +1,188 @@
+/* ============================================================
+ * PICKCAT Plus · 主题套装 / WinUI
+ * shell.css —— 左侧 Fluent NavigationView（紧凑栏 / 展开栏）
+ * ============================================================ */
+
+html.pickcat-suite-winui .pcs-rail {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 72px;
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 12px 0 14px;
+    background: rgba(252, 253, 254, 0.72);
+    border-right: 1px solid rgba(22, 52, 68, 0.07);
+    box-shadow: 1px 0 0 rgba(255, 255, 255, 0.6) inset;
+    backdrop-filter: blur(30px) saturate(1.45);
+    -webkit-backdrop-filter: blur(30px) saturate(1.45);
+    transition: width 0.22s cubic-bezier(0.2, 0, 0, 1), padding 0.22s cubic-bezier(0.2, 0, 0, 1);
+    font-family: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+}
+
+html.pickcat-suite-winui .pcs-burger {
+    width: 40px;
+    height: 40px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: #303030;
+    cursor: pointer;
+    padding: 0;
+    transition: background 0.15s ease;
+}
+
+html.pickcat-suite-winui .pcs-burger:hover {
+    background: rgba(22, 52, 68, 0.07);
+}
+
+html.pickcat-suite-winui .pcs-nav {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+}
+
+html.pickcat-suite-winui .pcs-item {
+    position: relative;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: #3b3b3b;
+    text-decoration: none;
+    cursor: pointer;
+    font: inherit;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+html.pickcat-suite-winui .pcs-item:hover {
+    background: rgba(22, 52, 68, 0.06);
+    color: #1b1b1b;
+}
+
+html.pickcat-suite-winui .pcs-item.is-active {
+    color: var(--ui-primary);
+    background: rgba(46, 125, 155, 0.1);
+}
+
+html.pickcat-suite-winui .pcs-item.is-active::before {
+    content: "";
+    position: absolute;
+    left: -12px;
+    top: 50%;
+    width: 3px;
+    height: 28px;
+    transform: translateY(-50%);
+    border-radius: 0 3px 3px 0;
+    background: var(--ui-primary);
+}
+
+html.pickcat-suite-winui .pcs-item.is-active .pcs-ico {
+    stroke: var(--ui-primary);
+}
+
+html.pickcat-suite-winui .pcs-ico {
+    width: 23px;
+    height: 23px;
+    flex: 0 0 auto;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.55;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+html.pickcat-suite-winui .pcs-label {
+    display: none;
+    font-size: 13.5px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+html.pickcat-suite-winui .pcs-fill {
+    flex: 1;
+}
+
+html.pickcat-suite-winui .pcs-avatar {
+    width: 34px;
+    height: 34px;
+    margin: 8px 0 6px;
+    border-radius: 50%;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #fff;
+    border: 1px solid rgba(22, 52, 68, 0.12);
+    box-shadow: 0 1px 3px rgba(22, 52, 68, 0.12);
+    text-decoration: none;
+    flex: 0 0 auto;
+}
+
+html.pickcat-suite-winui .pcs-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+/* 展开态 */
+html.pickcat-suite-winui .pcs-rail.is-open {
+    width: 240px;
+    align-items: stretch;
+    padding-left: 8px;
+    padding-right: 8px;
+}
+
+html.pickcat-suite-winui .pcs-rail.is-open .pcs-burger {
+    align-self: flex-start;
+}
+
+html.pickcat-suite-winui .pcs-rail.is-open .pcs-nav {
+    align-items: stretch;
+}
+
+html.pickcat-suite-winui .pcs-rail.is-open .pcs-item {
+    width: 100%;
+    justify-content: flex-start;
+    padding-left: 12px;
+}
+
+html.pickcat-suite-winui .pcs-rail.is-open .pcs-item.is-active::before {
+    left: -8px;
+}
+
+html.pickcat-suite-winui .pcs-rail.is-open .pcs-label {
+    display: inline;
+}
+
+html.pickcat-suite-winui .pcs-rail.is-open .pcs-avatar {
+    align-self: flex-start;
+    margin-left: 7px;
+}
+
+/* 内容让位（只加在真正的滚动内容层） */
+html.pickcat-suite-winui .v3-scroll-content {
+    padding-left: 72px;
+    transition: padding-left 0.22s cubic-bezier(0.2, 0, 0, 1);
+}
+
+html.pickcat-suite-winui.pickcat-suite-rail-open .v3-scroll-content {
+    padding-left: 240px;
+}

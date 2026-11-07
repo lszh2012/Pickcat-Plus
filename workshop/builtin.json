@@ -18,6 +18,10 @@
       },
       "cssFile": "workshop/packs/theme-halloween.css",
       "htmlClass": "pickcat-theme-halloween",
+      "pageBackground": true,
+      "decor": [
+        "corner-web"
+      ],
       "mode": "dark",
       "claims": [
         {

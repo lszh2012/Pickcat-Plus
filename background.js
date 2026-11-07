@@ -97,3 +97,40 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     handleNet(msg.payload || {}).then(sendResponse, (e) => sendResponse(fail(e && e.message)));
     return true;   // 异步回包
 });
+
+/* --------------------------------------------------------------------------
+ * 打开扩展内部的页面（比如整页创意工坊）
+ *
+ * 为什么不让内容脚本直接 window.open('chrome-extension://…/workshop.html')：
+ * 内容脚本跑在站点 origin 下，Chrome 会把这种跳转拦成
+ * ERR_BLOCKED_BY_CLIENT —— 除非把页面加进 web_accessible_resources，
+ * 而那等于允许任何网页用 iframe 套住我们的页面（点击劫持），不划算。
+ * 让 service worker 开新标签页就没有这个问题：发起方是扩展自己。
+ * ------------------------------------------------------------------------ */
+const OPENABLE_PAGES = {
+    workshop: 'workshop.html'
+};
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (!msg || msg.type !== 'pickcat-open') return false;
+    if (sender && sender.id && sender.id !== chrome.runtime.id) return false;
+
+    const page = OPENABLE_PAGES[(msg.payload && msg.payload.page) || ''];
+    if (!page) {
+        sendResponse({ ok: false, error: '未知页面：' + ((msg.payload && msg.payload.page) || '(空)') });
+        return true;
+    }
+
+    try {
+        chrome.tabs.create({ url: chrome.runtime.getURL(page) }, (tab) => {
+            if (chrome.runtime.lastError) {
+                sendResponse({ ok: false, error: chrome.runtime.lastError.message });
+            } else {
+                sendResponse({ ok: true, tabId: tab && tab.id });
+            }
+        });
+    } catch (e) {
+        sendResponse({ ok: false, error: (e && e.message) || '打开失败' });
+    }
+    return true;
+});
